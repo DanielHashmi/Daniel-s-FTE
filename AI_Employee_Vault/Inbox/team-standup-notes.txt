@@ -1,0 +1,28 @@
+URGENT: Team standup meeting notes from today - need to send summary to team by EOD
+
+Meeting: Daily Standup - Engineering Team
+Date: January 15, 2026
+Attendees: Sarah (PM), Mike (Backend), Lisa (Frontend), Tom (DevOps)
+
+Sarah: Sprint review is Friday, need to finalize demo. Still waiting on API integration. Mike can you prioritize? Also budget approval came through for new servers.
+
+Mike: Working on user authentication bug, should be done today. API integration will take 2-3 days. Need Lisa's input on the frontend endpoints. Database performance issue in production - Tom can you check logs?
+
+Lisa: Finished the dashboard redesign. Ready for review. Need API specs from Mike before I can integrate. Client reported UI bug on mobile - investigating. Should we schedule design review meeting?
+
+Tom: Server migration scheduled for this weekend. Need everyone to test staging environment by Thursday. Production logs show memory leak in payment service. Mike this might be related to your auth work. Also AWS costs went up 30% last month - need to investigate.
+
+Action items mentioned:
+- Mike: prioritize API integration
+- Tom: check production logs for database issue
+- Lisa: fix mobile UI bug
+- Everyone: test staging by Thursday
+- Sarah: schedule sprint demo
+- Team: review dashboard design
+- Tom: investigate AWS cost increase
+
+Follow-ups needed:
+- When can API integration be done?
+- Do we need to delay sprint review?
+- What's causing the memory leak?
+- Should we have a separate meeting about AWS costs?
