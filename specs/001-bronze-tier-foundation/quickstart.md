@@ -51,122 +51,42 @@ source venv/bin/activate
 # On Windows:
 venv\Scripts\activate
 
-# Install dependencies
+# Install dependencies (includes all required packages)
 pip install --upgrade pip
-pip install watchdog pyyaml python-dotenv pytest pytest-cov
+pip install -e .
 
-# If using Gmail Watcher, also install:
-pip install google-auth google-api-python-client
+# For development (includes testing tools):
+pip install -e ".[dev]"
 ```
 
 ## Step 3: Initialize Obsidian Vault
 
-The AI_Employee_Vault folder should already exist at the project root. Let's initialize its structure:
+The AI_Employee_Vault folder should already exist at the project root. You can use the setup-vault skill to initialize its structure:
 
 ```bash
 # Run the vault setup skill
-python -c "
-from pathlib import Path
+python .claude/skills/setup-vault/scripts/main_operation.py
 
-vault = Path('AI_Employee_Vault')
-vault.mkdir(exist_ok=True)
-
-# Create folder structure
-folders = ['Inbox', 'Needs_Action', 'Done', 'Plans', 'Logs',
-           'Pending_Approval', 'Approved', 'Rejected']
-for folder in folders:
-    (vault / folder).mkdir(exist_ok=True)
-
-print('✅ Vault structure created')
-"
+# This will create all required folders and files
 ```
 
-### Create Dashboard.md
+Alternatively, you can verify the structure manually:
 
 ```bash
-cat > AI_Employee_Vault/Dashboard.md << 'EOF'
-# AI Employee Dashboard
+# Check that all folders exist
+ls -la AI_Employee_Vault/
 
-**Last Updated**: [Not yet started]
-
-## System Status
-
-- **Watcher**: Not started
-- **Watcher Type**: Not configured
-- **Last Check**: N/A
-- **Uptime**: N/A
-
-## Pending Actions
-
-**Count**: 0
-
-No pending actions.
-
-## Recent Activity
-
-No activity yet.
-
-## Quick Stats
-
-- **Files Processed Today**: 0
-- **Files Processed This Week**: 0
-- **Average Processing Time**: N/A
-- **Success Rate**: N/A
-
-## Errors
-
-No errors.
-EOF
-
-echo "✅ Dashboard.md created"
-```
-
-### Create Company_Handbook.md
-
-```bash
-cat > AI_Employee_Vault/Company_Handbook.md << 'EOF'
-# Company Handbook
-
-**Last Updated**: 2026-01-14
-
-## Communication Style
-
-- Always be polite and professional
-- Use clear, concise language
-- Avoid jargon unless necessary
-- Address people by name when known
-
-## Approval Thresholds
-
-- **Always require approval**: Payments, new contacts, bulk operations
-- **No approval needed**: Reading emails, creating plans, logging activities
-- **Approval for amounts**: Any payment over $50
-
-## Priority Keywords
-
-**High Priority**:
-- urgent, asap, critical, emergency, invoice, payment
-
-**Medium Priority**:
-- important, soon, review, feedback
-
-**Low Priority**:
-- fyi, info, update, note
-
-## Error Handling Preferences
-
-- **Network errors**: Retry 3 times with exponential backoff
-- **Authentication errors**: Alert human immediately, pause operations
-- **Parsing errors**: Log warning, attempt partial processing, create clarification request
-
-## Business Rules
-
-- Invoices should be generated within 24 hours of request
-- Client emails should be acknowledged within 4 hours
-- Standard invoice payment terms: Net 30
-EOF
-
-echo "✅ Company_Handbook.md created"
+# Should show:
+# - Inbox/
+# - Needs_Action/
+# - Done/
+# - Plans/
+# - Logs/
+# - Pending_Approval/
+# - Approved/
+# - Rejected/
+# - Dashboard.md
+# - Company_Handbook.md
 ```
 
 ## Step 4: Configure Environment Variables
