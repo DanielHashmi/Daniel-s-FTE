@@ -1,0 +1,99 @@
+# Plan File YAML Schema
+
+# This schema defines the structure of YAML frontmatter for Plan Files
+# in the Bronze Tier Personal AI Employee system.
+
+# Version: 1.0.0
+# Date: 2026-01-14
+# Location: AI_Employee_Vault/Plans/*.md
+
+# Required fields
+plan_id:
+  type: string
+  required: true
+  description: Unique identifier for this plan
+  example: "PLAN_001"
+
+action_file:
+  type: string
+  required: true
+  description: Reference to the source action file
+  example: "EMAIL_gmail_2026-01-14T10-30-00.md"
+
+created:
+  type: string
+  format: iso8601
+  required: true
+  description: When the plan was created (ISO 8601 format)
+  example: "2026-01-14T10:35:00Z"
+
+status:
+  type: string
+  enum: [draft, pending_approval, approved, rejected, completed]
+  required: true
+  description: Current plan status
+  default: draft
+
+priority:
+  type: string
+  enum: [high, medium, low]
+  required: true
+  description: Priority level (inherited from action file)
+
+estimated_time:
+  type: string
+  required: true
+  description: Human-readable time estimate
+  examples:
+    - "5 minutes"
+    - "1 hour"
+    - "30 minutes"
+
+requires_approval:
+  type: boolean
+  required: true
+  description: Whether any step requires human approval
+  default: false
+
+# Optional fields
+approved_by:
+  type: string
+  required: false
+  description: Who approved the plan (if approved)
+  example: "human"
+
+approved_at:
+  type: string
+  format: iso8601
+  required: false
+  description: When the plan was approved
+  example: "2026-01-14T11:00:00Z"
+
+completed_at:
+  type: string
+  format: iso8601
+  required: false
+  description: When the plan was completed
+  example: "2026-01-14T11:30:00Z"
+
+# Example valid Plan File frontmatter:
+#
+# ---
+# plan_id: PLAN_001
+# action_file: EMAIL_gmail_2026-01-14T10-30-00.md
+# created: 2026-01-14T10:35:00Z
+# status: draft
+# priority: high
+# estimated_time: 15 minutes
+# requires_approval: false
+# ---
+
+# Validation rules:
+# 1. All required fields must be present
+# 2. Enum fields must match one of the allowed values
+# 3. Timestamps must be valid ISO 8601 format
+# 4. plan_id must be unique across all plans
+# 5. action_file must reference an existing action file
+# 6. If requires_approval is true, plan body must have "Required Approvals" section
+# 7. If status is "approved", approved_by and approved_at should be present
+# 8. If status is "completed", completed_at should be present
