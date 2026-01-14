@@ -1,0 +1,14 @@
+# Obsidian workspace files
+.obsidian/workspace.json
+
+# Logs
+Logs/*.log
+Logs/*.json
+
+# Temporary files
+*.tmp
+.DS_Store
+
+# Sensitive data
+*.key
+*.secret
