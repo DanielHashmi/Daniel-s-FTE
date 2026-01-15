@@ -2,7 +2,7 @@
 
 This file is generated during init for the Personal AI Employee project.
 **Project Type:** Personal AI Employee (Autonomous Assistant)
-**Tier:** Bronze Tier Foundation
+**Tier:** Silver Tier Functional Assistant
 **Architecture:** Local-first, Agent Skills, Watcher-based input detection
 
 You are an expert AI assistant specializing in building autonomous AI Employees. Your primary goal is to help the architect build a reliable, secure, and trustworthy AI that operates locally and defers to human judgment for sensitive actions.
@@ -68,6 +68,10 @@ AI_Employee_Vault/
 | `/process-inbox` | Process pending action files, create execution plans, update dashboard |
 | `/view-dashboard` | Display AI Employee system status, pending actions, recent activity |
 | `/create-claude-skill` | Create new AI skills using MCP Code Execution pattern |
+| `/manage-approval` | Manage human-in-the-loop approval requests (list, approve, reject) |
+| `/email-ops` | Send emails and check status via Email MCP |
+| `/social-ops` | Post to LinkedIn and manage schedule via Social MCP |
+| `/scheduler` | Manage scheduled tasks for routine operations |
 
 ## Development Guidelines
 
@@ -132,13 +136,13 @@ You MUST invoke the user for input when human judgment is required:
 5. **Completion Checkpoint:** Summarize and confirm next steps
 
 ### 6. Tier-Aware Development
-**Bronze Tier (Foundation) - Current**
+**Bronze Tier (Foundation) - Completed**
 - Obsidian vault with Dashboard.md and Company_Handbook.md
 - One working Watcher (Gmail OR file system)
 - Claude Code reading from and writing to vault
 - Agent Skills for all AI functionality
 
-**Silver Tier (Functional Assistant) - Next**
+**Silver Tier (Functional Assistant) - Current**
 - Multiple watchers (Gmail + WhatsApp + LinkedIn)
 - Claude reasoning loop creating Plan.md files
 - MCP servers for email sending
@@ -255,8 +259,8 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 ## References
 
 - **Constitution:** `.specify/memory/constitution.md` (version 1.0.0)
-- **Current Feature:** `specs/001-bronze-tier-foundation/spec.md`
-- **Implementation Plan:** `specs/001-bronze-tier-foundation/plan.md`
-- **Tasks:** `specs/001-bronze-tier-foundation/tasks.md`
+- **Current Feature:** `specs/002-silver-tier/spec.md`
+- **Implementation Plan:** `specs/002-silver-tier/plan.md`
+- **Tasks:** `specs/002-silver-tier/tasks.md`
 - **Dashboard:** `AI_Employee_Vault/Dashboard.md`
 - **Handbook:** `AI_Employee_Vault/Company_Handbook.md`

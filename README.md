@@ -1,21 +1,22 @@
-# AI Employee - Bronze Tier Foundation
+# AI Employee - Silver Tier Functional Assistant
 
-**Version**: 0.1.0
-**Status**: Bronze Tier (Foundation)
-**Branch**: `001-bronze-tier-foundation`
+**Version**: 0.2.0
+**Status**: Silver Tier (Functional Assistant)
+**Branch**: `002-silver-tier`
 
 ## Overview
 
-The Personal AI Employee system is a local-first, autonomous assistant that monitors input sources (Gmail or file system), creates structured action files, and helps you process tasks using Claude Code. This Bronze Tier implementation provides the foundational infrastructure for building more advanced automation in Silver and Gold tiers.
+The Personal AI Employee system Is a local-first, autonomous assistant that monitors multiple input sources (Gmail, WhatsApp, LinkedIn), creates structured plans, and executes approved actions via Agent Skills. This Silver Tier implementation transforms the foundation into a functional assistant capable of real-world interactions under human supervision.
 
 ### Key Features
 
 - **Local-First Architecture**: All data stays on your machine in an Obsidian vault
-- **Input Detection**: Monitors Gmail inbox OR file system for new work
-- **Structured Workflows**: Creates action files with YAML frontmatter for processing
-- **Agent Skills**: Reusable capabilities for vault setup, watcher management, and processing
+- **Multi-Channel Monitoring**: Monitors Gmail, WhatsApp, and LinkedIn for new work
+- **Intelligent Planning**: Claude autonomously creates execution plans for incoming tasks
+- **HITL Approval Workflow**: Sensitive actions require explicit human approval via file system
+- **MCP Integrations**: Modular servers for Email sending and LinkedIn posting
+- **Agent Skills**: Reusable capabilities for all AI operations
 - **Audit Logging**: Comprehensive JSON logs for all system activities
-- **Human-in-the-Loop**: Bronze Tier is read-only; no automated actions without approval
 
 ## Quick Start
 
@@ -192,11 +193,10 @@ Agent Skills are reusable capabilities that perform specific functions. They're 
 2. **watcher-manager**: Manage watcher processes
    ```bash
    python .claude/skills/watcher-manager/scripts/main_operation.py --action start --watcher-type filesystem
-   python .claude/skills/watcher-manager/scripts/main_operation.py --action stop
    python .claude/skills/watcher-manager/scripts/main_operation.py --action status
    ```
 
-3. **process-inbox**: Process pending action files
+3. **process-inbox**: Process pending action files and create plans
    ```bash
    python .claude/skills/process-inbox/scripts/main_operation.py --priority high
    ```
@@ -204,6 +204,26 @@ Agent Skills are reusable capabilities that perform specific functions. They're 
 4. **view-dashboard**: Display system status
    ```bash
    python .claude/skills/view-dashboard/scripts/main_operation.py
+   ```
+
+5. **manage-approval**: Manage HITL workflows (list, approve, reject)
+   ```bash
+   python .claude/skills/manage-approval/scripts/main_operation.py --action list
+   ```
+
+6. **email-ops**: Send/Check Emails via MCP
+   ```bash
+   python .claude/skills/email-ops/scripts/main_operation.py --action status
+   ```
+
+7. **social-ops**: LinkedIn posting via MCP
+   ```bash
+   python .claude/skills/social-ops/scripts/main_operation.py --action list-recent
+   ```
+
+8. **scheduler**: Manage cron tasks
+   ```bash
+   python .claude/skills/scheduler/scripts/main_operation.py --action list
    ```
 
 ## Configuration
@@ -312,20 +332,19 @@ Open `AI_Employee_Vault/Dashboard.md` in Obsidian to see:
 
 ## Next Steps
 
-Once Bronze Tier is working smoothly:
+Once Silver Tier is working smoothly:
 
-1. **Silver Tier**: Add multiple watchers, MCP servers, HITL approval workflows
-2. **Gold Tier**: Full automation with accounting, social media, CEO briefings
-3. **Customization**: Modify `Company_Handbook.md` to match your workflow
-4. **Optimization**: Tune check intervals, add custom priority keywords
+1. **Gold Tier**: Full automation with accounting, social media, CEO briefings
+2. **Customization**: Modify `Company_Handbook.md` to match your workflow
+3. **Optimization**: Tune check intervals, add custom priority keywords
 
 ## Documentation
 
-- **Specification**: `specs/001-bronze-tier-foundation/spec.md`
-- **Implementation Plan**: `specs/001-bronze-tier-foundation/plan.md`
-- **Tasks**: `specs/001-bronze-tier-foundation/tasks.md`
-- **Quickstart Guide**: `specs/001-bronze-tier-foundation/quickstart.md`
-- **Data Model**: `specs/001-bronze-tier-foundation/data-model.md`
+- **Specification**: `specs/002-silver-tier/spec.md`
+- **Implementation Plan**: `specs/002-silver-tier/plan.md`
+- **Tasks**: `specs/002-silver-tier/tasks.md`
+- **Quickstart Guide**: `specs/002-silver-tier/quickstart.md`
+- **Data Model**: `specs/002-silver-tier/data-model.md`
 
 ## Contributing
 
@@ -343,9 +362,9 @@ MIT License - See LICENSE file for details
 ## Support
 
 - **Issues**: Check logs in `AI_Employee_Vault/Logs/`
-- **Documentation**: See `specs/001-bronze-tier-foundation/`
+- **Documentation**: See `specs/002-silver-tier/`
 - **Community**: Join Wednesday research meetings
 
 ---
 
-**Congratulations!** You now have a working Bronze Tier Personal AI Employee system. The foundation is in place for building more advanced automation in Silver and Gold tiers.
+**Congratulations!** You now have a working Silver Tier Personal AI Employee system. The foundation is in place for building more advanced automation in Gold tier.
