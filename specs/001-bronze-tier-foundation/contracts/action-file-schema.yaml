@@ -1,0 +1,83 @@
+# Action File YAML Schema
+
+# This schema defines the structure of YAML frontmatter for Action Files
+# in the Bronze Tier Personal AI Employee system.
+
+# Version: 1.0.0
+# Date: 2026-01-14
+# Location: AI_Employee_Vault/Needs_Action/*.md
+
+# Required fields
+type:
+  type: string
+  enum: [email, file, manual]
+  required: true
+  description: Type of input that created this action
+
+source:
+  type: string
+  required: true
+  description: Source identifier (e.g., "gmail", "inbox", "user")
+  examples:
+    - gmail
+    - inbox
+    - user
+
+timestamp:
+  type: string
+  format: iso8601
+  required: true
+  description: When the action was created (ISO 8601 format)
+  example: "2026-01-14T10:30:00Z"
+
+priority:
+  type: string
+  enum: [high, medium, low]
+  required: true
+  description: Priority level for processing
+  default: medium
+
+status:
+  type: string
+  enum: [pending, processing, completed, error]
+  required: true
+  description: Current processing status
+  default: pending
+
+created_by:
+  type: string
+  enum: [watcher, user]
+  required: true
+  description: Who/what created this action file
+
+# Optional fields
+processed_at:
+  type: string
+  format: iso8601
+  required: false
+  description: When the action was processed by Claude Code
+  example: "2026-01-14T10:35:00Z"
+
+error_message:
+  type: string
+  required: false
+  description: Error details if status is "error"
+  example: "Failed to parse email content"
+
+# Example valid Action File frontmatter:
+#
+# ---
+# type: email
+# source: gmail
+# timestamp: 2026-01-14T10:30:00Z
+# priority: high
+# status: pending
+# created_by: watcher
+# ---
+
+# Validation rules:
+# 1. All required fields must be present
+# 2. Enum fields must match one of the allowed values
+# 3. Timestamp must be valid ISO 8601 format
+# 4. If status is "error", error_message should be present
+# 5. If status is "completed", processed_at should be present
