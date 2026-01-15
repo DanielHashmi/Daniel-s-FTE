@@ -9,6 +9,9 @@ This is your AI Employee's knowledge base and workspace.
 - **Done/**: Completed action files
 - **Plans/**: Generated plan files
 - **Logs/**: System logs
+- **Pending_Approval/**: Files awaiting human approval
+- **Approved/**: Human-approved action files
+- **Rejected/**: Human-rejected action files
 
 ## Key Files
 
@@ -17,4 +20,4 @@ This is your AI Employee's knowledge base and workspace.
 
 ---
 
-*Bronze Tier - Personal AI Employee Foundation*
+*Silver Tier - Functional Assistant*

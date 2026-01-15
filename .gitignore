@@ -87,3 +87,39 @@ ecosystem.config.js.backup
 # Documentation builds
 docs/_build/
 site/
+
+# AI Employee Vault - Runtime Data (sensitive & expensive)
+# These contain real email content, personal data, and are auto-generated
+AI_Employee_Vault/Inbox/
+AI_Employee_Vault/Needs_Action/
+AI_Employee_Vault/Done/
+AI_Employee_Vault/Plans/
+AI_Employee_Vault/Logs/
+AI_Employee_Vault/Pending_Approval/
+AI_Employee_Vault/Approved/
+AI_Employee_Vault/Rejected/
+
+# Keep the folder structure with .gitkeep files
+!AI_Employee_Vault/Inbox/.gitkeep
+!AI_Employee_Vault/Needs_Action/.gitkeep
+!AI_Employee_Vault/Done/.gitkeep
+!AI_Employee_Vault/Plans/.gitkeep
+!AI_Employee_Vault/Logs/.gitkeep
+!AI_Employee_Vault/Pending_Approval/.gitkeep
+!AI_Employee_Vault/Approved/.gitkeep
+!AI_Employee_Vault/Rejected/.gitkeep
+
+# Gmail OAuth tokens (sensitive)
+gmail_token.json
+token.pickle
+
+# Claude Memory Plugin auto-generated files
+**/CLAUDE.md
+
+# Obsidian workspace (user-specific)
+AI_Employee_Vault/.obsidian/workspace.json
+AI_Employee_Vault/.obsidian/workspace-mobile.json
+
+# Test output files
+/tmp/
+*.output

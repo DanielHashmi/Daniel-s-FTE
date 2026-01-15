@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Script to package a Claude Code skill into a distributable .skill file.
