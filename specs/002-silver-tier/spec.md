@@ -187,6 +187,15 @@ As a system operator, I need the AI Employee to monitor its own health (watcher 
 - **FR-018**: Plan files MUST update in real-time as steps are completed, with timestamps for each step and clear indication of current progress
 - **FR-019**: System MUST detect and flag plan failures, updating plan status to "error" and alerting human via Dashboard.md when errors occur
 
+#### Claude Code Reasoning Engine (Hackathon Requirement)
+
+- **FR-047**: System MUST invoke Claude Code CLI (`claude` command) as the reasoning engine for plan generation, NOT use hardcoded templates
+- **FR-048**: Claude Code invocation MUST pass action file content and context (Company_Handbook.md, Business_Goals.md) as prompt input
+- **FR-049**: System MUST capture Claude Code's output and write it as structured Plan.md files in Plans/ folder
+- **FR-050**: System MUST implement graceful fallback to template-based planning if Claude Code CLI is unavailable
+- **FR-051**: System MUST implement rate limiting to prevent excessive Claude Code invocations (configurable, default: max 10 per minute)
+- **FR-052**: System MUST log all Claude Code invocations with prompt, response, and duration for debugging and cost tracking
+
 #### Human-in-the-Loop Approval
 
 - **FR-020**: System MUST create approval request files in Pending_Approval/ for all sensitive actions, including full details of the proposed action
