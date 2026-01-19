@@ -51,17 +51,25 @@ class ClaudeInvoker:
             self.logger.warning("Claude Code CLI not found - will use fallback template logic")
 
     def _check_claude_available(self) -> bool:
-        """Check if the claude command is available in PATH.
+        """Check if the ccr (Claude Code Router) command is available in PATH.
 
-        NOTE: Even if claude CLI is available, subprocess invocation doesn't work
-        reliably due to TTY/auth issues. The Claude reasoning loop should be
-        triggered via manual /process-inbox skill invocation instead.
-
-        This method returns False to force template fallback. Real AI reasoning
-        happens when user runs /process-inbox in an interactive Claude Code session.
+        We use 'ccr code --print' instead of direct 'claude -p' because:
+        - ccr handles authentication and model routing automatically
+        - Direct claude CLI has TTY/auth issues with subprocess invocation
+        - ccr provides consistent behavior across environments
         """
-        # Disabled: subprocess invocation has TTY/auth issues
-        # return shutil.which("claude") is not None
+        # Check for ccr (Claude Code Router) which wraps claude CLI with auth handling
+        ccr_path = shutil.which("ccr")
+        if ccr_path:
+            self.logger.info(f"Found ccr (Claude Code Router) at: {ccr_path}")
+            return True
+
+        # Fallback: check for direct claude CLI
+        claude_path = shutil.which("claude")
+        if claude_path:
+            self.logger.info(f"Found claude CLI at: {claude_path} (may have auth issues)")
+            return False  # Don't use direct claude due to TTY issues
+
         return False
 
     def _rate_limit_check(self) -> bool:
@@ -137,37 +145,43 @@ class ClaudeInvoker:
         priority = action_metadata.get('priority', 'normal')
         source = action_metadata.get('source', 'unknown')
 
-        prompt = f"""You are an AI Employee assistant processing an incoming action.
+        prompt = f"""You are an AI Employee. Generate an execution plan for this action.
 
-## Context (Company Rules & Goals)
+CONTEXT:
 {context}
 
-## Action Details
-- Type: {action_type}
-- Priority: {priority}
-- Source: {source}
-
-## Action Content
+ACTION ({action_type} from {source}, priority: {priority}):
 {action_content}
 
-## Your Task
-Create a structured execution plan for this action. Output ONLY valid markdown with:
+OUTPUT ONLY THE MARKDOWN BELOW - NO EXPLANATION, NO COMMENTARY:
 
-1. **Objective**: One sentence describing what needs to be done
-2. **Analysis**: Brief analysis of the action (2-3 sentences)
-3. **Execution Steps**: Numbered list with checkboxes
-   - Mark steps that require human approval with **[APPROVAL REQUIRED]**
-   - Be specific and actionable
-4. **Risk Assessment**: Any risks or concerns (brief)
-5. **Estimated Completion**: How long this might take
+---
+action_id: "{action_metadata.get('id', 'unknown')}"
+type: "{action_type}"
+source: "{source}"
+created: "{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
+requires_approval: <true_if_sensitive_else_false>
+---
 
-IMPORTANT:
-- If this involves sending email to a NEW contact, mark that step as requiring approval
-- If this involves any payment or financial action, mark as requiring approval
-- If this involves public posting (LinkedIn, social media), mark as requiring approval
-- Keep the plan concise but complete
+# Execution Plan: <brief_title>
 
-Output the plan in markdown format starting with a YAML frontmatter block."""
+## Objective
+<one_sentence_goal>
+
+## Analysis
+<2-3_sentences_about_context_and_intent>
+
+## Execution Steps
+- [ ] Step 1
+- [ ] Step 2 **[APPROVAL REQUIRED]** (if sending email/payment/posting)
+- [ ] Step 3
+
+## Risk Assessment
+<brief_risks>
+
+RULES:
+- Mark [APPROVAL REQUIRED] for: new contacts, payments, public posts
+- Output ONLY the markdown above, nothing else"""
 
         # Record invocation time for rate limiting
         self._invocation_times.append(time.time())
@@ -175,13 +189,13 @@ Output the plan in markdown format starting with a YAML frontmatter block."""
         start_time = time.time()
 
         try:
-            self.logger.info(f"Invoking Claude Code for {action_type} action planning...")
+            self.logger.info(f"Invoking Claude Code (via ccr) for {action_type} action planning...")
 
-            # NOTE: This code path is currently disabled because subprocess invocation
-            # of Claude Code has TTY/auth issues. Keeping for future reference.
-            # Real AI reasoning happens via /process-inbox skill in interactive session.
+            # Use ccr (Claude Code Router) which handles auth and model routing
+            # Pass prompt via stdin to avoid shell escaping issues with long prompts
             result = subprocess.run(
-                ['claude', '-p', prompt],
+                ['ccr', 'code', '-p'],
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_seconds,
