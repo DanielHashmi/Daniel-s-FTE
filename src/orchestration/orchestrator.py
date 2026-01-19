@@ -23,6 +23,7 @@ from src.orchestration.plan_manager import PlanManager
 from src.orchestration.approval_manager import ApprovalManager
 from src.orchestration.watchdog import Watchdog
 from src.orchestration.dashboard_manager import DashboardManager
+from src.orchestration.ralph_loop import RalphLoopManager
 
 class Orchestrator:
     def __init__(self):
@@ -43,6 +44,8 @@ class Orchestrator:
         self.approval_manager = ApprovalManager()
         self.watchdog = Watchdog()
         self.dashboard_manager = DashboardManager()
+        self.ralph_manager = RalphLoopManager()
+        self.ralph_manager.integrate_with_orchestrator(self)
         self.last_health_check = 0
         self.last_dashboard_update = 0
         self.recent_activity = []

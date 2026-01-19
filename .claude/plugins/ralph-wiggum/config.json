@@ -1,0 +1,51 @@
+{
+  "name": "ralph-wiggum",
+  "version": "1.0.0",
+  "description": "Persistent task execution loop for Gold Tier autonomous operations",
+  "enabled": true,
+
+  "defaults": {
+    "max_iterations": 10,
+    "timeout_per_iteration": 3600,
+    "completion_strategy": "file_movement",
+    "pause_between_iterations": 1
+  },
+
+  "completion_strategies": {
+    "file_movement": {
+      "description": "Complete when task file moves to Done/ folder",
+      "watch_folder": "Needs_Action",
+      "done_folder": "Done"
+    },
+    "promise_based": {
+      "description": "Complete when output contains promise tag",
+      "default_promise": "TASK_COMPLETE",
+      "promise_format": "<promise>{}</promise>"
+    }
+  },
+
+  "hitl_integration": {
+    "pause_on_approval_needed": true,
+    "auto_resume_on_approval": true,
+    "approval_timeout_hours": 24
+  },
+
+  "error_handling": {
+    "max_consecutive_errors": 3,
+    "retry_on_transient_errors": true,
+    "create_human_review_on_max_iterations": true
+  },
+
+  "logging": {
+    "log_file": "AI_Employee_Vault/Logs/ralph-loop.log",
+    "log_level": "INFO",
+    "log_iterations": true,
+    "log_context_preview_length": 500
+  },
+
+  "state_management": {
+    "state_dir": ".claude/state",
+    "history_dir": "AI_Employee_Vault/Ralph_History",
+    "cleanup_history_after_days": 30
+  }
+}
