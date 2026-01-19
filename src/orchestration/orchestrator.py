@@ -14,7 +14,7 @@ from src.lib.logging import get_logger
 from src.lib.vault import vault
 
 # Import Watchers
-from src.watchers.gmail import GmailWatcher
+# from src.watchers.gmail import GmailWatcher  # DISABLED: WSL google-cloud stat() hang
 from src.watchers.whatsapp import WhatsAppWatcher
 from src.watchers.linkedin import LinkedInWatcher
 
@@ -33,7 +33,7 @@ class Orchestrator:
 
         # Initialize watchers
         self.watchers = [
-            GmailWatcher(interval=60),
+            # GmailWatcher(interval=60),  # DISABLED: WSL google-cloud stat() hang
             WhatsAppWatcher(interval=60),
             LinkedInWatcher(interval=300)
         ]
