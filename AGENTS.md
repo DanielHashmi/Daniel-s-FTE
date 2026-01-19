@@ -61,6 +61,8 @@ AI_Employee_Vault/
 ```
 
 ### Claude Agent Skills (Available Commands)
+
+#### Bronze/Silver Tier Skills
 | Skill | Purpose |
 |-------|---------|
 | `/setup-vault` | Initialize AI Employee Vault structure with folders and core files |
@@ -72,6 +74,17 @@ AI_Employee_Vault/
 | `/email-ops` | Send emails and check status via Email MCP |
 | `/social-ops` | Post to LinkedIn and manage schedule via Social MCP |
 | `/scheduler` | Manage scheduled tasks for routine operations |
+
+#### Gold Tier Skills
+| Skill | Purpose |
+|-------|---------|
+| `/xero-accounting` | Sync transactions, invoices, and financial data from Xero. Generate financial summaries |
+| `/social-media-suite` | Post to Facebook, Instagram, and Twitter/X with platform-specific formatting |
+| `/ceo-briefing` | Generate weekly business audit and CEO briefing with revenue, tasks, bottlenecks |
+| `/ralph-wiggum-loop` | Execute autonomous multi-step tasks until completion using persistent iteration |
+| `/cross-domain-orchestrator` | Coordinate operations across Personal and Business domains |
+| `/error-recovery` | Handle errors gracefully with retry logic, automatic recovery, graceful degradation |
+| `/audit-logger` | Comprehensive audit logging with compliance tracking, retention, and analysis |
 
 ## Development Guidelines
 
