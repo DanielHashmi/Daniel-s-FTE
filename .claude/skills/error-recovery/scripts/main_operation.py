@@ -165,12 +165,12 @@ def refresh_token(service: str):
     """Refresh authentication token for a service."""
     token_services = {
         "gmail": {"token_file": "~/.gmail_token.json", "refresh_method": "oauth"},
-        "xero": {"token_file": "~/.xero_tokens.json", "refresh_method": "oauth"},
+        "odoo": {"token_file": "~/.odoo_config.json", "refresh_method": "api_key"},
         "linkedin": {"token_file": "~/.linkedin_token.json", "refresh_method": "oauth"},
         "facebook": {"token_file": "~/.meta_token.json", "refresh_method": "long_lived"},
         "instagram": {"token_file": "~/.meta_token.json", "refresh_method": "long_lived"},
         "twitter": {"token_file": "~/.twitter_tokens.json", "refresh_method": "oauth2"}
-    }
+    }Replacement with Odoo configuration and API key method - earliest complete match in the file.
 
     if service not in token_services:
         print(f"✗ Unknown service: {service}")
