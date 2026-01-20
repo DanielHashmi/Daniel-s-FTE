@@ -1,0 +1,74 @@
+# Syncthing sync exclusions for vault
+# This file controls what Syncthing should ignore during sync
+
+# Secrets and environment files (already in .gitignore, but explicitly for sync)
+.env
+.env.local
+.env.*.local
+.env.cloud
+.env.local_instance
+
+# Sensitive config files
+secret_*
+*secret*
+config/secrets.*
+
+# Credentials and keys
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# OAuth tokens
+*_token.json
+credentials.json
+
+# Database files (if any are moved to vault)
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Logs (keep locally)
+Logs/
+*.log
+
+# Build artifacts
+build/
+dist/
+target/
+__pycache__/
+ode_modules/
+
+# IDE files (already synced by project)
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# In_Progress files (claimed by agents)
+# These files move between agents, so don't sync as quickly
+# (or limit sync frequency to reduce conflicts)
+
+# Pending/Approved/Rejected (workflow files)
+# These are transient and can cause sync conflicts
+Pending Approval:/*_tmp_*
+Approved:/*_tmp_*
+Rejected:/*_tmp_*
+
+# Debug/test files
+*.test
+*.debug

@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""Odoo Accounting Operations - Gold Tier Skill
-
-Syncs transactions, invoices, and financial data from Odoo 19 (Community Edition).
-Generates financial summaries and reports for CEO Briefing.
-
-NOTE: This script currently uses XML-RPC for compatibility with standard Python libraries.
-Odoo 19 has deprecated XML-RPC/JSON-RPC in favor of the JSON-2 API (to be enforced in Odoo 20).
-This implementation remains functional for Odoo 19 but should be migrated to JSON-2
-before Odoo 20 (Fall 2026).
 """
-import argparse
+Odoo Accounting Main Operation - Extended for draft/live modes.
+
+This script supports both draft mode (cloud) and live mode (local with approval).
+"""
+
+import os
 import sys
 import json
-import os
+import yaml
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-import xmlrpc.client
+from datetime import datetime
+from typing import Dict, Optional, Any, List
+from xmlrpc.client import ServerProxy
+import argparse
+import csv
 
 # Config
-VAULT_ROOT = Path("AI_Employee_Vault")
+VAULT_ROOT = Path(os.getenv('VAULT_ROOT', 'AI_Employee_Vault'))
 ACCOUNTING_DIR = VAULT_ROOT / "Accounting"
 LOGS_DIR = VAULT_ROOT / "Logs"
 AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
@@ -31,6 +29,7 @@ def setup_dirs():
 
 
 def audit_log(action: str, target: str, status: str, details: Optional[dict] = None):
+    """Log action to audit trail."""
     entry = {
         "timestamp": datetime.now().isoformat(),
         "action_type": "odoo_accounting",
@@ -48,398 +47,430 @@ def audit_log(action: str, target: str, status: str, details: Optional[dict] = N
         print(f"Warning: Audit log failed: {e}", file=sys.stderr)
 
 
-def check_odoo_credentials() -> bool:
-    """Check if Odoo credentials are configured."""
-    required = ["ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"]
-    return all(os.getenv(var) for var in required)
-
-
-def get_odoo_connection():
-    """Establish connection to Odoo via XML-RPC."""
-    url = os.getenv("ODOO_URL", "http://localhost:8069")
-    db = os.getenv("ODOO_DB")
-    username = os.getenv("ODOO_USER")
-    password = os.getenv("ODOO_PASSWORD")
-
-    try:
-        common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
-        uid = common.authenticate(db, username, password, {})
-        if not uid:
-            raise Exception("Authentication failed")
-
-        models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
-        return db, uid, password, models
-    except Exception as e:
-        print(f"Odoo connection error: {e}", file=sys.stderr)
-        return None, None, None, None
-
-
-def sync_transactions():
-    """Sync transactions from Odoo via JSON-RPC."""
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
-
-    if not check_odoo_credentials() or dry_run:
-        # Use sample data in dry-run mode (same format as Xero skill)
-        month = datetime.now().strftime("%Y-%m")
-        output_file = ACCOUNTING_DIR / f"transactions_{month}.json"
-
-        SAMPLE_TRANSACTIONS = [
-            {"id": "INV-001", "type": "invoice", "amount": 1500.00, "client": "Acme Corp", "date": "2026-01-15", "status": "paid"},
-            {"id": "INV-002", "type": "invoice", "amount": 2500.00, "client": "TechStart Inc", "date": "2026-01-16", "status": "unpaid"},
-            {"id": "EXP-001", "type": "expense", "amount": -99.00, "vendor": "Adobe", "category": "Software", "date": "2026-01-10"},
-            {"id": "EXP-002", "type": "expense", "amount": -49.00, "vendor": "Notion", "category": "Software", "date": "2026-01-12"},
-            {"id": "PAY-001", "type": "payment", "amount": 1500.00, "from": "Acme Corp", "date": "2026-01-17", "invoice": "INV-001"},
-        ]
-
-        # Load existing or start fresh
-        existing = json.loads(output_file.read_text()) if output_file.exists() else []
-        existing_ids = {t["id"] for t in existing}
-
-        # Add new transactions (prevent duplicates)
-        new_count = 0
-        for tx in SAMPLE_TRANSACTIONS:
-            if tx["id"] not in existing_ids:
-                existing.append(tx)
-                new_count += 1
-
-        output_file.write_text(json.dumps(existing, indent=2))
-
-        print(f"✓ Synced {new_count} new transactions (DRY RUN)")
-        print(f"  Total: {len(existing)} transactions in {output_file.name}")
-        audit_log("sync", str(output_file), "success (dry_run)", {"new": new_count, "total": len(existing)})
-        return True
-
-    # Real Odoo API integration via XML-RPC
-    try:
-        db, uid, password, models = get_odoo_connection()
-        if not uid:
-            return False
-
-        # Sync invoices (account.move)
-        # Get invoices from last 30 days
-        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        invoices = models.execute_kw(
-            db, uid, password,
-            'account.move', 'search_read',
-            [[['move_type', 'in', ['out_invoice', 'in_invoice']],
-              ['invoice_date', '>=', thirty_days_ago]]],
-            {'fields': ['name', 'amount_total', 'partner_id', 'invoice_date', 'payment_state', 'state']}
-        )
-
-        # Sync payments (account.payment)
-        payments = models.execute_kw(
-            db, uid, password,
-            'account.payment', 'search_read',
-            [[['payment_date', '>=', thirty_days_ago]]],
-            {'fields': ['name', 'amount', 'partner_id', 'payment_date', 'payment_type']}
-        )
-
-        # Process and save data
-        month = datetime.now().strftime("%Y-%m")
-        output_file = ACCOUNTING_DIR / f"transactions_{month}.json"
-
-        existing = json.loads(output_file.read_text()) if output_file.exists() else []
-        existing_ids = {t["id"] for t in existing}
-
-        new_count = 0
-
-        # Add invoices to transaction list
-        for inv in invoices:
-            tx_id = f"INV-{inv['id']}"
-            if tx_id not in existing_ids:
-                tx = {
-                    "id": tx_id,
-                    "type": "invoice",
-                    "amount": float(inv['amount_total']),
-                    "client": inv.get('partner_id', [None, 'Unknown'])[1] if inv.get('partner_id') else 'Unknown',
-                    "date": inv['invoice_date'],
-                    "status": inv.get('payment_state', 'unknown')
-                }
-                existing.append(tx)
-                new_count += 1
-
-        # Add payments to transaction list
-        for pay in payments:
-            tx_id = f"PAY-{pay['id']}"
-            if tx_id not in existing_ids:
-                tx = {
-                    "id": tx_id,
-                    "type": "payment",
-                    "amount": float(pay['amount']),
-                    "from": pay.get('partner_id', [None, 'Unknown'])[1] if pay.get('partner_id') else 'Unknown',
-                    "date": pay['payment_date'],
-                    "invoice": None  # Link to invoice when available
-                }
-                existing.append(tx)
-                new_count += 1
-
-        output_file.write_text(json.dumps(existing, indent=2))
-
-        print(f"✓ Synced {new_count} new transactions from Odoo")
-        print(f"  Total: {len(existing)} transactions in {output_file.name}")
-        audit_log("sync", str(output_file), "success", {"new": new_count, "total": len(existing)})
-        return True
-
-    except Exception as e:
-        print(f"✗ Odoo sync failed: {e}", file=sys.stderr)
-        audit_log("sync", "odoo_server", "error", {"error": str(e)})
-        return False
-
-
-def generate_summary(period: str, start: Optional[str] = None, end: Optional[str] = None):
-    """Generate financial summary for the specified period."""
-    month = datetime.now().strftime("%Y-%m")
-    tx_file = ACCOUNTING_DIR / f"transactions_{month}.json"
-
-    if not tx_file.exists():
-        print("✗ No transaction data. Run sync first.")
-        return False
-
-    transactions = json.loads(tx_file.read_text())
-
-    # Calculate totals
-    revenue = sum(t["amount"] for t in transactions if t.get("type") in ["invoice", "payment"] and t["amount"] > 0)
-    expenses = sum(abs(t["amount"]) for t in transactions if t.get("type") == "expense")
-    net_profit = revenue - expenses
-
-    # Category breakdown
-    expense_categories = {}
-    for t in transactions:
-        if t.get("type") == "expense":
-            cat = t.get("category", "Other")
-            expense_categories[cat] = expense_categories.get(cat, 0) + abs(t["amount"])
-
-    # Unpaid invoices
-    unpaid = [t for t in transactions if t.get("type") == "invoice" and t.get("status") != "paid"]
-    unpaid_total = sum(t["amount"] for t in unpaid)
-
-    # Generate summary markdown
-    summary_date = datetime.now().strftime("%Y-%m-%d")
-    summary = f"""# Financial Summary - {period.capitalize()}Generated: {summary_date}
-
-## Overview| Metric | Amount ||--------|--------|| Total Revenue | ${revenue:,.2f} || Total Expenses | ${expenses:,.2f} || Net Profit | ${net_profit:,.2f} || Unpaid Invoices | ${unpaid_total:,.2f} |
-
-## Expense Breakdown| Category | Amount ||----------|--------|"""
-    for cat, amount in sorted(expense_categories.items(), key=lambda x: -x[1]):
-        summary += f"| {cat} | ${amount:,.2f} |\n"
-
-    if unpaid:
-        summary += "\n## Unpaid Invoices\n"
-        for inv in unpaid:
-            summary += f"- {inv['id']}: ${inv['amount']:,.2f} from {inv.get('client', 'Unknown')}\n"
-
-    summary += f"\n---\n*Generated by odoo-accounting skill*\n"
-
-    output_file = ACCOUNTING_DIR / f"summary_{summary_date}.md"
-    output_file.write_text(summary)
-
-    print(f"✓ Financial summary generated")
-    print(f"  Revenue: ${revenue:,.2f} | Expenses: ${expenses:,.2f} | Net: ${net_profit:,.2f}")
-    audit_log("summary", str(output_file), "success", {"revenue": revenue, "expenses": expenses, "net": net_profit})
-    return True
-
-
-def list_invoices(status: str = "all"):
-    """List invoices filtered by status."""
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
-
-    if dry_run:
-        # In dry-run mode, use local transaction file
-        month = datetime.now().strftime("%Y-%m")
-        tx_file = ACCOUNTING_DIR / f"transactions_{month}.json"
-
-        if not tx_file.exists():
-            print("✗ No transaction data. Run sync first.")
-            return False
-
-        transactions = json.loads(tx_file.read_text())
-        invoices = [t for t in transactions if t.get("type") == "invoice"]
-
-        if status != "all":
-            invoices = [i for i in invoices if i.get("status") == status]
-
-        print(f"Invoices ({status}):")
-        print("-" * 60)
-        for inv in invoices:
-            status_emoji = "✅" if inv.get("status") == "paid" else "⏳"
-            print(f"{status_emoji} {inv['id']}: ${inv['amount']:,.2f} - {inv.get('client', 'Unknown')} [{inv.get('status', 'unknown')}]")
-
-        print(f"\nTotal: {len(invoices)} invoice(s)")
-        return True
-
-    # Real Odoo integration - query invoices
-    try:
-        db, uid, password, models = get_odoo_connection()
-        if not uid:
-            return False
-
-        domain = [['move_type', 'in', ['out_invoice', 'in_invoice']]]
-        if status != "all":
-            domain.append(['payment_state', '=', status])
-
-        invoices = models.execute_kw(
-            db, uid, password,
-            'account.move', 'search_read',
-            [domain],
-            {'fields': ['name', 'amount_total', 'amount_residual', 'partner_id',
-                       'invoice_date', 'invoice_date_due', 'payment_state', 'state'],
-             'limit': 100, 'order': 'invoice_date desc'}
-        )
-
-        print(f"Invoices from Odoo ({status}):")
-        print("-" * 80)
-        for inv in invoices:
-            status_emoji = "✅" if inv.get('payment_state') == 'paid' else "⏳"
-            partner = inv.get('partner_id', [None, 'Unknown'])[1] if inv.get('partner_id') else 'Unknown'
-            due_date = inv.get('invoice_date_due', 'N/A')
-            print(f"{status_emoji} {inv['name']}: ${inv['amount_total']:,.2f}")
-            print(f"    Client: {partner} | Due: {due_date} | Status: {inv.get('payment_state')}")
-            print(f"    Outstanding: ${inv.get('amount_residual', 0):,.2f}")
-            print()
-
-        print(f"Total: {len(invoices)} invoice(s)")
-        audit_log("list_invoices", "odoo", "success", {"count": len(invoices), "status": status})
-        return True
-
-    except Exception as e:
-        print(f"✗ Odoo invoice listing failed: {e}", file=sys.stderr)
-        audit_log("list_invoices", "odoo", "error", {"error": str(e)})
-        return False
-
-
-def analyze_expenses(top: int = 10):
-    """Analyze top expense categories."""
-    month = datetime.now().strftime("%Y-%m")
-    tx_file = ACCOUNTING_DIR / f"transactions_{month}.json"
-
-    if not tx_file.exists():
-        print("✗ No transaction data. Run sync first.")
-        return False
-
-    transactions = json.loads(tx_file.read_text())
-    expenses = [t for t in transactions if t.get("type") == "expense"]
-
-    # Group by category
-    categories = {}
-    for exp in expenses:
-        cat = exp.get("category", "Other")
-        categories[cat] = categories.get(cat, 0) + abs(exp["amount"])
-
-    print(f"Top {top} Expense Categories:")
-    print("-" * 40)
-    for cat, amount in sorted(categories.items(), key=lambda x: -x[1])[:top]:
-        print(f"  ${amount:,.2f} - {cat}")
-
-    total = sum(categories.values())
-    print(f"\nTotal Expenses: ${total:,.2f}")
-    audit_log("expense_analysis", "local_data", "success", {"total": total, "categories": len(categories)})
-    return True
-
-
-def list_accounts():
-    """List accounts from Odoo chart of accounts."""
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
-
-    if dry_run:
-        print("Account listing requires Odoo connection (DRY RUN mode active)")
-        print("\nSample Accounts:")
-        print("400000 - Income")
-        print("500000 - Cost of Revenue")
-        print("600000 - Expenses")
-        return True
-
-    try:
-        db, uid, password, models = get_odoo_connection()
-        if not uid:
-            return False
-
-        accounts = models.execute_kw(
-            db, uid, password,
-            'account.account', 'search_read',
-            [[]],
-            {'fields': ['code', 'name', 'account_type', 'balance'],
-             'limit': 50, 'order': 'code'}
-        )
-
-        print("Chart of Accounts from Odoo:")
-        print("-" * 70)
-        for acc in accounts:
-            balance = acc.get('balance', 0)
-            print(f"{acc['code']} - {acc['name']:30s} | ${balance:,.2f} | {acc.get('account_type')}")
-
-        audit_log("list_accounts", "odoo", "success", {"count": len(accounts)})
-        return True
-
-    except Exception as e:
-        print(f"✗ Odoo account listing failed: {e}", file=sys.stderr)
-        audit_log("list_accounts", "odoo", "error", {"error": str(e)})
-        return False
-
-
-def check_status():
-    """Check Odoo integration status."""
-    has_creds = check_odoo_credentials()
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
-
-    month = datetime.now().strftime("%Y-%m")
-    tx_file = ACCOUNTING_DIR / f"transactions_{month}.json"
-    has_data = tx_file.exists()
-
-    print("Odoo Accounting Status:")
-    print(f"  Credentials: {'✓ Configured' if has_creds else '✗ Not configured'}")
-    print(f"  Mode: {'DRY RUN (simulated)' if dry_run else 'LIVE (Odoo connection)'}")
-    print(f"  Data: {'✓ ' + tx_file.name if has_data else '✗ No data (run sync)'}")
-
-    if has_data:
-        tx = json.loads(tx_file.read_text())
-        print(f"  Transactions: {len(tx)}")
-
-    # Test connection if credentials present and not dry-run
-    if has_creds and not dry_run:
+class OdooAccountingClient:
+    """Client for interacting with Odoo accounting system."""
+
+    def __init__(self, mode: str = 'draft'):
+        """
+        Initialize Odoo client.
+
+        Args:
+            mode: 'draft' for cloud (no posting), 'live' for local (with approval)
+        """
+        self.mode = mode
+        self.dry_run = os.getenv('DRY_RUN', 'true').lower() == 'true'
+
+        # Odoo connection settings
+        self.url = os.getenv('ODOO_URL', 'http://localhost:8069')
+        self.db = os.getenv('ODOO_DB')
+        self.username = os.getenv('ODOO_USERNAME')
+        self.password = os.getenv('ODOO_PASSWORD')
+
+        if not all([self.db, self.url, self.username, self.password]):
+            raise ValueError("Missing Odoo configuration. Set ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD")
+
+        self.uid = None
+        self.models = None
+        self._connect()
+
+    def _connect(self):
+        """Connect to Odoo XML-RPC API."""
         try:
-            db, uid, password, models = get_odoo_connection()
-            if uid:
-                print(f"  Connection: ✓ Connected to {os.getenv('ODOO_URL')}")
-                print(f"  User: {os.getenv('ODOO_USER')}")
-            else:
-                print(f"  Connection: ✗ Failed (check credentials)")
-        except Exception as e:
-            print(f"  Connection: ✗ Error - {e}")
+            common = ServerProxy(f'{self.url}/xmlrpc/2/common')
+            self.uid = common.authenticate(self.db, self.username, self.password, {})
 
-    return True
+            if not self.uid:
+                raise ConnectionError("Failed to authenticate with Odoo")
+
+            self.models = ServerProxy(f'{self.url}/xmlrpc/2/object')
+            print(f"✓ Connected to Odoo ({self.mode} mode)")
+
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to Odoo: {e}")
+
+    def get_draft_invoices(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Fetch draft invoices that need review."""
+        try:
+            invoices = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'account.move', 'search_read',
+                [[['state', '=', 'draft']]],
+                {'fields': ['name', 'partner_id', 'amount_total', 'invoice_date',
+                           'invoice_line_ids', 'state'], 'limit': limit}
+            )
+            return invoices
+        except Exception as e:
+            print(f"Error fetching invoices: {e}")
+            return []
+
+    def validate_invoice(self, invoice_id: int) -> Dict[str, Any]:
+        """Validate invoice before posting."""
+        validation_results = {
+            'valid': False,
+            'errors': [],
+            'warnings': []
+        }
+
+        try:
+            invoice = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'account.move', 'read',
+                [invoice_id],
+                {'fields': ['name', 'partner_id', 'amount_total',
+                           'invoice_line_ids', 'state', 'journal_id']}
+            )
+
+            if not invoice:
+                validation_results['errors'].append("Invoice not found")
+                return validation_results
+
+            invoice = invoice[0]
+
+            # Check if already posted
+            if invoice['state'] != 'draft':
+                validation_results['errors'].append(f"Invoice is not in draft state (current: {invoice['state']})")
+
+            # Validate partner
+            if not invoice.get('partner_id'):
+                validation_results['errors'].append("Missing customer")
+
+            # Validate lines
+            if not invoice.get('invoice_line_ids'):
+                validation_results['errors'].append("No invoice lines")
+
+            # Validate amount
+            if invoice.get('amount_total', 0) <= 0:
+                validation_results['errors'].append("Invalid invoice amount")
+
+            # Set valid flag
+            if not validation_results['errors']:
+                validation_results['valid'] = True
+
+        except Exception as e:
+            validation_results['errors'].append(f"Validation error: {str(e)}")
+
+        return validation_results
+
+    def validate_invoices_batch(self, invoice_ids: List[int]) -> Dict[str, Any]:
+        """Validate batch of invoices for posting."""
+        results = {
+            'total': len(invoice_ids),
+            'valid': [],
+            'invalid': [],
+            'validation_report': {}
+        }
+
+        for invoice_id in invoice_ids:
+            validation = self.validate_invoice(invoice_id)
+            invoice = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'account.move', 'read', [invoice_id],
+                {'fields': ['name', 'amount_total']}
+            )[0]
+
+            if validation['valid']:
+                results['valid'].append(invoice_id)
+                results['validation_report'][invoice_id] = {
+                    'name': invoice['name'],
+                    'amount': invoice['amount_total'],
+                    'status': 'valid'
+                }
+            else:
+                results['invalid'].append(invoice_id)
+                results['validation_report'][invoice_id] = {
+                    'name': invoice['name'],
+                    'amount': invoice['amount_total'],
+                    'status': 'invalid',
+                    'errors': validation['errors']
+                }
+
+        return results
+
+    def create_invoice_draft_report(self, output_file: Optional[str] = None) -> Path:
+        """Generate draft invoice report (usable in cloud)."""
+        print("Generating draft invoice report...")
+
+        # Fetch draft invoices
+        invoices = self.get_draft_invoices()
+
+        if not invoices:
+            print("No draft invoices found")
+            return None
+
+        # Generate report
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        vault_path = Path(os.getenv('VAULT_ROOT', 'AI_Employee_Vault'))
+        report_file = vault_path / "Reports" / f"draft_invoices_{timestamp}.csv"
+        report_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(report_file, 'w', newline='') as csvfile:
+            fieldnames = ['ID', 'Invoice', 'Customer', 'Amount', 'Date', 'Status', 'Validation']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for inv in invoices:
+                invoice_id = inv['id']
+                validation = self.validate_invoice(invoice_id)
+
+                # Get customer name
+                customer_name = "Unknown"
+                if inv.get('partner_id'):
+                    customer_name = inv['partner_id'][1] if isinstance(inv['partner_id'], list) else inv['partner_id']
+
+                writer.writerow({
+                    'ID': invoice_id,
+                    'Invoice': inv.get('name', 'N/A'),
+                    'Customer': customer_name,
+                    'Amount': inv.get('amount_total', 0),
+                    'Date': inv.get('invoice_date', 'N/A'),
+                    'Status': inv.get('state', 'unknown'),
+                    'Validation': 'PASS' if validation['valid'] else 'FAIL'
+                })
+
+        print(f"✓ Report generated: {report_file}")
+        print(f"  Total invoices: {len(invoices)}")
+
+        return report_file
+
+    def post_invoice(self, invoice_id: int, require_approval: bool = True) -> Dict[str, Any]:
+        """
+        Post single invoice.
+
+        Args:
+            invoice_id: Odoo invoice ID
+            require_approval: If True, requires explicit approval (live mode)
+
+        Returns:
+            Dict with posting result
+        """
+        result = {
+            'invoice_id': invoice_id,
+            'posted': False,
+            'draft_mode': self.mode == 'draft',
+            'approval_required': require_approval
+        }
+
+        # Validate invoice
+        validation = self.validate_invoice(invoice_id)
+        if not validation['valid']:
+            result['error'] = validation['errors']
+            return result
+
+        # Draft mode: Report only, don't post
+        if self.mode == 'draft':
+            print(f"[DRAFT MODE] Would post invoice {invoice_id} (not posting)")
+            result['posted'] = False
+            result['note'] = 'Draft mode - no posting'
+            audit_log('post_invoice_draft', str(invoice_id), 'success_draft', {'invoice_id': invoice_id})
+            return result
+
+        # Live mode with approval required
+        if self.mode == 'live' and require_approval:
+            # Check for approval file
+            vault_path = Path(os.getenv('VAULT_ROOT', 'AI_Employee_Vault'))
+            approval_file = vault_path / "Pending_Approval" / f"invoice_{invoice_id}_approval.yaml"
+
+            if not approval_file.exists():
+                # Create approval request
+                invoice = self.models.execute_kw(
+                    self.db, self.uid, self.password,
+                    'account.move', 'read', [invoice_id],
+                    {'fields': ['name', 'amount_total', 'partner_id']}
+                )[0]
+
+                approval_content = f"""---
+approval_id: invoice_post_{invoice_id}
+type: invoice_posting
+invoice_id: {invoice_id}
+invoice_name: {invoice['name']}
+amount: {invoice['amount_total']}
+partner: {invoice.get('partner_id', [None, 'Unknown'])[1] if invoice.get('partner_id') else 'Unknown'}
+requires_approval: true
+mode: live
+action: post
+---
+
+# Invoice Posting Approval Request
+
+This invoice requires approval before posting.
+
+**Invoice**: {invoice['name']}
+**Amount**: ${invoice['amount_total']:,.2f}
+**Customer**: {invoice.get('partner_id', [None, 'Unknown'])[1] if invoice.get('partner_id') else 'Unknown'}
+
+## Actions
+
+To approve: Move to Approved folder
+To reject: Move to Rejected folder with feedback
+"""
+
+                approval_file.write_text(approval_content)
+
+                result['posted'] = False
+                result['approval_required'] = True
+                result['approval_file'] = str(approval_file)
+                print(f"✓ Approval request created: {approval_file}")
+                print(f"  Manual approval needed for invoice {invoice_id}")
+                return result
+
+        # Post the invoice
+        try:
+            if self.dry_run:
+                print(f"[DRY RUN] Would post invoice {invoice_id}")
+                result['posted'] = False
+                result['dry_run'] = True
+                audit_log('post_invoice_dry', str(invoice_id), 'success_dry', {'invoice_id': invoice_id})
+            else:
+                self.models.execute_kw(
+                    self.db, self.uid, self.password,
+                    'account.move', 'action_post',
+                    [[invoice_id]]
+                )
+                result['posted'] = True
+                audit_log('post_invoice', str(invoice_id), 'success', {'invoice_id': invoice_id})
+                print(f"✓ Posted invoice {invoice_id}")
+
+        except Exception as e:
+            result['posted'] = False
+            result['error'] = str(e)
+            audit_log('post_invoice_error', str(invoice_id), 'error', {'invoice_id': invoice_id, 'error': str(e)})
+
+        return result
+
+    def post_invoices_batch(self, invoice_ids: List[int], require_approval: bool = True) -> Dict[str, Any]:
+        """Post batch of invoices."""
+        results = {
+            'mode': self.mode,
+            'total': len(invoice_ids),
+            'posted': [],
+            'skipped': [],
+            'failed': [],
+            'draft_mode_skipped': 0
+        }
+
+        if self.mode == 'draft':
+            print(f"[DRAFT MODE] Validating {len(invoice_ids)} invoices (not posting)")
+            validation = self.validate_invoices_batch(invoice_ids)
+            results['draft_mode_skipped'] = validation['total']
+            results['validation_report'] = validation['validation_report']
+            audit_log('post_batch_draft', str(invoice_ids), 'success_draft', {'count': len(invoice_ids)})
+            return results
+
+        for invoice_id in invoice_ids:
+            result = self.post_invoice(invoice_id, require_approval)
+
+            if result['posted']:
+                results['posted'].append(invoice_id)
+            elif 'approval_required' in result and not result.get('posted'):
+                results['skipped'].append(invoice_id)
+            else:
+                results['failed'].append({
+                    'invoice_id': invoice_id,
+                    'error': result.get('error')
+                })
+
+        audit_log('post_invoices_batch', str(invoice_ids), 'completed', results)
+        return results
+
+    def generate_invoice_summary(self, limit: int = 100) -> Dict[str, Any]:
+        """Generate comprehensive invoice summary."""
+        draft = self.get_draft_invoices(limit)
+
+        summary = {
+            'timestamp': datetime.now().isoformat(),
+            'mode': self.mode,
+            'total_draft': len(draft),
+            'invoices': []
+        }
+
+        for inv in draft:
+            invoice_id = inv['id']
+            validation = self.validate_invoice(invoice_id)
+
+            summary['invoices'].append({
+                'id': invoice_id,
+                'name': inv.get('name'),
+                'amount': inv.get('amount_total'),
+                'state': inv.get('state'),
+                'valid': validation['valid'],
+                'validation_errors': validation['errors'] if not validation['valid'] else []
+            })
+
+        return summary
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Odoo Accounting Operations")
-    parser.add_argument("--action", required=True,
-                       choices=["sync", "summary", "invoices", "expenses", "accounts", "status"])
-    parser.add_argument("--period", default="monthly", choices=["daily", "weekly", "monthly", "custom"])
-    parser.add_argument("--start", help="Start date (YYYY-MM-DD) for custom period")
-    parser.add_argument("--end", help="End date (YYYY-MM-DD) for custom period")
-    parser.add_argument("--status", default="all", choices=["all", "paid", "not_paid", "partial", "in_payment"])
-    parser.add_argument("--top", type=int, default=10, help="Number of top items to show")
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(description='Odoo Accounting Operations - Draft/Live Mode')
+    parser.add_argument('--mode', choices=['draft', 'live'], default='draft',
+                       help='Operation mode (draft for cloud, live for local)')
+
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+
+    # Draft report command
+    parser_report = subparsers.add_parser('draft-report', help='Generate draft invoice report')
+    parser_report.add_argument('--output', help='Output file path')
+
+    # Validate single invoice
+    parser_validate = subparsers.add_parser('validate', help='Validate invoice')
+    parser_validate.add_argument('invoice_id', type=int, help='Invoice ID')
+
+    # Validate batch
+    parser_validate_batch = subparsers.add_parser('validate-batch', help='Validate batch of invoices')
+    parser_validate_batch.add_argument('invoice_ids', type=int, nargs='+', help='Invoice IDs')
+
+    # Post single invoice
+    parser_post = subparsers.add_parser('post', help='Post invoice')
+    parser_post.add_argument('invoice_id', type=int, help='Invoice ID')
+    parser_post.add_argument('--no-approval', action='store_true', help='Skip approval check')
+
+    # Post batch
+    parser_post_batch = subparsers.add_parser('post-batch', help='Post batch of invoices')
+    parser_post_batch.add_argument('invoice_ids', type=int, nargs='+', help='Invoice IDs')
+    parser_post_batch.add_argument('--no-approval', action='store_true', help='Skip approval check')
+
+    # Summary
+    parser_summary = subparsers.add_parser('summary', help='Generate invoice summary')
+    parser_summary.add_argument('--limit', type=int, default=100, help='Limit results')
 
     args = parser.parse_args()
     setup_dirs()
 
-    if args.action == "sync":
-        if not sync_transactions():
-            sys.exit(1)
-    elif args.action == "summary":
-        if not generate_summary(args.period, args.start, args.end):
-            sys.exit(1)
-    elif args.action == "invoices":
-        if not list_invoices(args.status):
-            sys.exit(1)
-    elif args.action == "expenses":
-        if not analyze_expenses(args.top):
-            sys.exit(1)
-    elif args.action == "accounts":
-        if not list_accounts():
-            sys.exit(1)
-    elif args.action == "status":
-        check_status()
+    # Create client
+    client = OdooAccountingClient(mode=args.mode)
+
+    if args.command == 'draft-report':
+        output = args.output
+        if output:
+            client.create_invoice_draft_report(output)
+        else:
+            client.create_invoice_draft_report()
+
+    elif args.command == 'validate':
+        result = client.validate_invoice(args.invoice_id)
+        print(json.dumps(result, indent=2))
+
+    elif args.command == 'validate-batch':
+        result = client.validate_invoices_batch(args.invoice_ids)
+        print(json.dumps(result, indent=2))
+
+    elif args.command == 'post':
+        require_approval = not args.no_approval
+        result = client.post_invoice(args.invoice_id, require_approval)
+        print(json.dumps(result, indent=2))
+
+    elif args.command == 'post-batch':
+        require_approval = not args.no_approval
+        result = client.post_invoices_batch(args.invoice_ids, require_approval)
+        print(json.dumps(result, indent=2))
+
+    elif args.command == 'summary':
+        summary = client.generate_invoice_summary(limit=args.limit)
+        print(json.dumps(summary, indent=2))
+
+    else:
+        parser.print_help()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

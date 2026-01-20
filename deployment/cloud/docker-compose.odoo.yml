@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  odoo:
+    image: odoo:17.0
+    container_name: odoo-enterprise
+    ports:
+      - "8069:8069"
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo_password
+      - DB_PORT_5432_TCP_ADDR=db
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - odoo-network
+    labels:
+      - "com.anthropic.agent=odoo"
+      - "com.anthronic.tier=platinum"
+
+  db:
+    image: postgres:15
+    container_name: postgres-odoo
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=odoo_password
+      - POSTGRES_USER=odoo
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - db-data:/var/lib/postgresql/data/pgdata
+    restart: unless-stopped
+    networks:
+      - odoo-network
+    labels:
+      - "com.anthropic.agent=database"
+
+  db-backup:
+    image: tiredofit/db-backup
+    container_name: odoo-backup
+    environment:
+      - DB_TYPE=pgsql
+      - DB_HOST=db
+      - DB_NAME=postgres
+      - DB_USER=odoo
+      - DB_PASS=odoo_password
+      - BACKUP_LOCATION=/backup
+      - COMPRESSION=GZ
+      - BACKUP_INTERVAL=86400
+      - CLEANUP_OLDER_THAN=604800
+    volumes:
+      - db-backups:/backup
+    depends_on:
+      - db
+    networks:
+      - odoo-network
+    labels:
+      - "com.anthropic.agent=backup"
+
+volumes:
+  odoo-data:
+    driver: local
+  db-data:
+    driver: local
+  db-backups:
+    driver: local
+
+networks:
+  odoo-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
