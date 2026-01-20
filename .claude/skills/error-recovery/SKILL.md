@@ -85,7 +85,7 @@ RETRY_CONFIG = {
 | Component Down | System Behavior |
 |----------------|-----------------|
 | Gmail API | Queue emails, process other watchers |
-| Xero API | Skip financial sync, use cached data |
+| Odoo API | Skip financial sync, use cached data |
 | Social APIs | Queue posts, continue other operations |
 | Orchestrator | Watchdog restarts within 30s |
 

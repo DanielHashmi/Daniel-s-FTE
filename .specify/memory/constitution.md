@@ -1,13 +1,14 @@
 <!--
 Sync Impact Report:
-- Version: 0.0.0 → 1.0.0 (Initial constitution creation)
-- Modified Principles: N/A (new constitution)
-- Added Sections: All sections (initial creation)
+- Version change: 1.0.0 → 1.1.0 (Added Platinum Tier section)
+- Modified Principles: None
+- Added Sections: Platinum Tier Requirements
 - Removed Sections: None
 - Templates Status:
-  ✅ spec-template.md - Aligned (user stories support tiered delivery)
-  ✅ plan-template.md - Aligned (constitution check section present)
-  ✅ tasks-template.md - Aligned (phase-based structure supports incremental delivery)
+  ✅ spec-template.md - No changes needed (tiered delivery already supported)
+  ✅ plan-template.md - No changes needed (constitution check present)
+  ✅ tasks-template.md - No changes needed (phase-based structure supports new tier)
+  ✅ commands/*.md - No outdated references found
 - Follow-up TODOs: None
 -->
 
@@ -225,6 +226,17 @@ Each component MUST include:
 
 **Success Criteria**: Can operate autonomously for extended periods, generate proactive insights, and handle complex multi-step workflows.
 
+### Platinum Tier (Enterprise Assistant)
+
+**Mandatory Deliverables** (Gold + following):
+- Enterprise governance and compliance tracking (`/enterprise-governance`)
+- Multi-team coordination (`/multi-team-sync`)
+- Automated compliance reporting (`/compliance-audit`)
+- Advanced scalability for enterprise/team use
+- All AI functionality as Agent Skills
+
+**Success Criteria**: Can operate in enterprise environments with full compliance, multi-team synchronization, governance controls, and cross-domain orchestration.
+
 ## Ethics & Responsible Automation
 
 ### When AI MUST NOT Act Autonomously
@@ -276,4 +288,4 @@ This constitution supersedes all other development practices and guidelines. All
 
 This constitution is version-controlled alongside code. Changes MUST be committed with clear messages explaining the amendment and its impact.
 
-**Version**: 1.0.0 | **Ratified**: 2026-01-14 | **Last Amended**: 2026-01-14
+**Version**: 1.1.0 | **Ratified**: 2026-01-14 | **Last Amended**: 2026-01-20

@@ -21,7 +21,7 @@
 
 ### Financial Data
 Primary: `AI_Employee_Vault/Accounting/transactions_*.json`
-- Synced from Xero accounting skill
+- Synced from Odoo accounting skill
 - Falls back to sample data if unavailable
 
 ### Task Data
@@ -71,7 +71,7 @@ File naming: `YYYY-MM-DD_Monday_Briefing.md`
 ## Troubleshooting
 
 ### "No financial data"
-Run Xero sync first: `python3 .claude/skills/xero-accounting/scripts/main_operation.py --action sync`
+Run Xero sync first: `python3 .claude/skills/odoo-accounting/scripts/main_operation.py --action sync`
 
 ### "No tasks found"
 Ensure completed tasks are moved to `/Done` folder.

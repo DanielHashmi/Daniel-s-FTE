@@ -157,7 +157,7 @@ Estimated time: 40+ hours
 
 2. Full cross-domain integration (Personal \+ Business)
 
-3. Create accounting system for your business in Xero ( [https://www.xero.com/](https://www.xero.com/) ) and integrate it with its MCP Server ( [https://github.com/XeroAPI/xero-mcp-server](https://github.com/XeroAPI/xero-mcp-server) )
+3. Create an accounting system for your business in Odoo Community (self-hosted, local) and integrate it via an [MCP server](https://github.com/AlanOgic/mcp-odoo-adv) using Odoo’s JSON-RPC APIs (Odoo 19+). 
 
 4. Integrate Facebook and Instagram and post messages and generate summary
 
@@ -176,6 +176,29 @@ Estimated time: 40+ hours
 11. Documentation of your architecture and lessons learned
 
 12. All AI functionality should be implemented as [Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)
+
+## **Platinum Tier: Always-On Cloud \+ Local Executive (Production-ish AI Employee)**
+
+Estimated time: 60+ hours  
+All Gold requirements plus:
+
+1. **Run the AI Employee on Cloud 24/7** (always-on watchers \+ orchestrator \+ health monitoring). You can deploy a Cloud VM (Oracle/AWS/etc.) \- [Oracle Cloud Free VMs](https://www.oracle.com/cloud/free/) can be used for this (subject to limits/availability).  
+2. **Work-Zone Specialization (domain ownership)**:  
+   1. **Cloud owns:** Email triage \+ draft replies \+ social post drafts/scheduling (draft-only; requires Local approval before send/post)  
+   2. **Local owns:** approvals, WhatsApp session, payments/banking, and final “send/post” actions  
+3. Delegation via Synced Vault (Phase 1\)  
+   1. Agents communicate by **writing files** into:  
+      1. /Needs\_Action/\<domain\>/, /Plans/\<domain\>/, /Pending\_Approval/\<domain\>/  
+   2. Prevent double-work using:  
+      1. /In\_Progress/\<agent\>/ claim-by-move rule  
+      2. single-writer rule for Dashboard.md (Local)  
+      3. Cloud writes updates to /Updates/ (or /Signals/), and Local merges them into Dashboard.md.  
+   3. For Vault sync (Phase 1\) use Git (recommended) or Syncthing.  
+   4. **Claim-by-move rule:** first agent to move an item from /Needs\_Action to /In\_Progress/\<agent\>/ owns it; other agents must ignore it.  
+4. **Security rule:** Vault sync includes only markdown/state. Secrets never sync (.env, tokens, WhatsApp sessions, banking creds). So Cloud never stores or uses WhatsApp sessions, banking credentials, or payment tokens.  
+5. **Deploy Odoo Community on a Cloud VM (24/7)** with HTTPS, backups, and health monitoring; integrate Cloud Agent with Odoo via MCP for draft-only accounting actions and Local approval for posting invoices/payments.  
+6. Optional A2A Upgrade (Phase 2): Replace some file handoffs with direct A2A messages later, while keeping the vault as the audit record  
+7. **Platinum demo (minimum passing gate):** Email arrives while Local is offline → Cloud drafts reply \+ writes approval file → when Local returns, user approves → Local executes send via MCP → logs → moves task to /Done.
 
 ### **1\. The "Foundational Layer" (Local Engine)**
 
@@ -780,6 +803,18 @@ Claude Code and Obsidian for Personal Automation
 
 Claude Code just Built me an AI Agent Team (Claude Code \+ Skills \+ MCP)  
 [https://www.youtube.com/watch?v=0J2\_YGuNrDo](https://www.youtube.com/watch?v=0J2_YGuNrDo) 
+
+**Why Odoo (Value-for-Money ERP Perspective)?**
+
+[https://chatgpt.com/share/6967deaf-9404-8001-9ad7-03017255ebaf](https://chatgpt.com/share/6967deaf-9404-8001-9ad7-03017255ebaf)
+
+**Odoo Official Documentation (Community Edition)**
+
+[https://www.odoo.com/documentation](https://www.odoo.com/documentation)
+
+**Odoo 19 External JSON-2 API (recommended for your Odoo 19+ MCP integration):**
+
+[https://www.odoo.com/documentation/19.0/developer/reference/external\_api.html](https://www.odoo.com/documentation/19.0/developer/reference/external_api.html?utm_source=chatgpt.com)
 
 Curated resources organized by learning stage. Start with Prerequisites, then progress through each level.
 

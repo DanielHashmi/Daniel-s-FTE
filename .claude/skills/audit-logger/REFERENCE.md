@@ -43,8 +43,8 @@
 | email_send | Email sent via MCP |
 | email_draft | Email drafted |
 | social_post | Social media post |
-| xero_sync | Xero data sync |
-| xero_invoice | Invoice created |
+| odoo_sync | Odoo data sync |
+| odoo_invoice | Invoice created |"
 | approval_request | HITL request created |
 | approval_granted | HITL approval given |
 | file_move | File operation |

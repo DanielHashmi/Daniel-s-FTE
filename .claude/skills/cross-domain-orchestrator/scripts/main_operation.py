@@ -26,8 +26,8 @@ DOMAINS = {
         "skills": ["email-ops", "watcher-manager"]
     },
     "business": {
-        "components": ["xero", "linkedin", "facebook", "instagram", "twitter"],
-        "skills": ["xero-accounting", "social-ops", "social-media-suite"]
+        "components": ["odoo", "linkedin", "facebook", "instagram", "twitter"],
+        "skills": ["odoo-accounting", "social-ops", "social-media-suite"]
     }
 }
 
@@ -36,7 +36,7 @@ WORKFLOWS = {
     "client-invoice-flow": {
         "description": "Generate and send invoice to client",
         "steps": [
-            {"action": "xero-accounting", "command": "--action invoices --status unpaid"},
+            {"action": "odoo-accounting", "command": "--action invoices --status unpaid"},
             {"action": "generate-invoice", "template": "invoice"},
             {"action": "email-ops", "command": "--action send --attachment invoice.pdf"},
             {"action": "social-ops", "command": "--action post --message 'Thanks for your business!'"},
@@ -46,8 +46,8 @@ WORKFLOWS = {
     "weekly-business-audit": {
         "description": "Full weekly business audit and CEO briefing",
         "steps": [
-            {"action": "xero-accounting", "command": "--action sync"},
-            {"action": "xero-accounting", "command": "--action summary --period weekly"},
+            {"action": "odoo-accounting", "command": "--action sync"},
+            {"action": "odoo-accounting", "command": "--action summary --period weekly"},
             {"action": "ceo-briefing", "command": "--action generate"},
             {"action": "email-ops", "command": "--action send --subject 'Weekly CEO Briefing'"}
         ]
@@ -91,7 +91,7 @@ def check_component_health(component: str) -> dict:
     health_checks = {
         "gmail": lambda: os.path.exists(os.path.expanduser("~/.gmail_credentials.json")),
         "whatsapp": lambda: os.path.exists(os.path.expanduser("~/.whatsapp_session")),
-        "xero": lambda: bool(os.getenv("XERO_CLIENT_ID")),
+        "odoo": lambda: bool(os.getenv("XERO_CLIENT_ID")),
         "linkedin": lambda: bool(os.getenv("LINKEDIN_ACCESS_TOKEN")),
         "facebook": lambda: bool(os.getenv("META_ACCESS_TOKEN")),
         "instagram": lambda: bool(os.getenv("INSTAGRAM_BUSINESS_ID")),
@@ -138,7 +138,7 @@ def sync_all():
 
     if dry_run:
         print("\n[DRY RUN] Would execute:")
-        print("  - xero-accounting --action sync")
+        print("  - odoo-accounting --action sync")
         print("  - social-media-suite --action status")
     else:
         # Execute real syncs
@@ -222,7 +222,7 @@ def check_health():
     print("\nSKILLS")
     print("-" * 30)
     skill_dir = Path(".claude/skills")
-    for skill in ["xero-accounting", "social-media-suite", "ceo-briefing", "ralph-wiggum-loop"]:
+    for skill in ["odoo-accounting", "social-media-suite", "ceo-briefing", "ralph-wiggum-loop"]:
         skill_path = skill_dir / skill / "SKILL.md"
         exists = skill_path.exists()
         status_emoji = "✓" if exists else "✗"
@@ -279,7 +279,7 @@ def show_integration_map():
 │                                                              │
 │  PERSONAL DOMAIN            BUSINESS DOMAIN                  │
 │  ┌─────────────────┐       ┌─────────────────────────────┐  │
-│  │ Gmail           │       │ Xero (Accounting)           │  │
+│  │ Gmail           │       │ Odoo (Accounting)           │  │
 │  │ WhatsApp        │◄─────►│ LinkedIn                    │  │
 │  │ Calendar        │       │ Facebook/Instagram/Twitter  │  │
 │  └─────────────────┘       └─────────────────────────────┘  │
@@ -296,7 +296,7 @@ def show_integration_map():
 │                           ▼                                  │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │              SKILLS LAYER                             │   │
-│  │   • xero-accounting    • ceo-briefing                 │   │
+│  │   • odoo-accounting    • ceo-briefing                 │   │
 │  │   • social-media-suite • ralph-wiggum-loop            │   │
 │  │   • error-recovery     • audit-logger                 │   │
 │  └──────────────────────────────────────────────────────┘   │

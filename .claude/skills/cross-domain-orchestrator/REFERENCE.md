@@ -10,7 +10,7 @@ Components focused on individual productivity:
 
 ### Business Domain
 Components for business operations:
-- **Xero**: Accounting and financial management
+- **Odoo**: Accounting and financial management
 - **LinkedIn**: Professional networking and content
 - **Facebook/Instagram/Twitter**: Social media marketing
 
@@ -24,7 +24,7 @@ Add to `AI_Employee_Vault/Config/workflows.yaml`:
 my-custom-workflow:
   description: "My custom business workflow"
   steps:
-    - action: xero-accounting
+    - action: odoo-accounting
       command: "--action sync"
       on_error: continue
 
@@ -77,7 +77,7 @@ domains:
       keywords: ["urgent", "invoice", "payment"]
 
   business:
-    xero:
+    odoo:
       enabled: true
       sync_schedule: "0 6 * * *"
     linkedin:
@@ -109,7 +109,7 @@ When a component fails, the orchestrator:
 ```python
 RECOVERY_STRATEGY = {
     "gmail": "retry_with_backoff",
-    "xero": "use_cached_data",
+    "odoo": "use_cached_data",
     "social": "queue_for_later",
     "critical": "alert_human"
 }

@@ -2,7 +2,7 @@
 
 This file is generated during init for the Personal AI Employee project.
 **Project Type:** Personal AI Employee (Autonomous Assistant)
-**Tier:** Silver Tier Functional Assistant
+**Tier:** Platinum Tier Enterprise Assistant
 **Architecture:** Local-first, Agent Skills, Watcher-based input detection
 
 You are an expert AI assistant specializing in building autonomous AI Employees. Your primary goal is to help the architect build a reliable, secure, and trustworthy AI that operates locally and defers to human judgment for sensitive actions.
@@ -75,10 +75,10 @@ AI_Employee_Vault/
 | `/social-ops` | Post to LinkedIn and manage schedule via Social MCP |
 | `/scheduler` | Manage scheduled tasks for routine operations |
 
-#### Gold Tier Skills
+#### Gold Tier Skills\n\n#### Platinum Tier Skills\n| Skill | Purpose |\n|-------|---------|\n| `/enterprise-governance` | Enterprise compliance and governance |\n| `/multi-team-sync` | Coordinate across multiple teams |\n| `/compliance-audit` | Automated compliance reporting |
 | Skill | Purpose |
 |-------|---------|
-| `/xero-accounting` | Sync transactions, invoices, and financial data from Xero. Generate financial summaries |
+| `/odoo-accounting` | Sync transactions, invoices, and financial data from Odoo. Generate financial summaries |"
 | `/social-media-suite` | Post to Facebook, Instagram, and Twitter/X with platform-specific formatting |
 | `/ceo-briefing` | Generate weekly business audit and CEO briefing with revenue, tasks, bottlenecks |
 | `/ralph-wiggum-loop` | Execute autonomous multi-step tasks until completion using persistent iteration |
@@ -155,13 +155,13 @@ You MUST invoke the user for input when human judgment is required:
 - Claude Code reading from and writing to vault
 - Agent Skills for all AI functionality
 
-**Silver Tier (Functional Assistant) - Current**
+**Silver Tier (Functional Assistant) - Completed**
 - Multiple watchers (Gmail + WhatsApp + LinkedIn)
 - Claude reasoning loop creating Plan.md files
 - MCP servers for email sending
 - HITL approval workflow
 
-**Gold Tier (Autonomous Employee)**
+**Gold Tier (Autonomous Employee) - Completed**
 - Full cross-domain integration
 - Accounting integration (Xero)
 - Social media integration
@@ -272,8 +272,8 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 ## References
 
 - **Constitution:** `.specify/memory/constitution.md` (version 1.0.0)
-- **Current Feature:** `specs/002-silver-tier/spec.md`
-- **Implementation Plan:** `specs/002-silver-tier/plan.md`
-- **Tasks:** `specs/002-silver-tier/tasks.md`
+- **Current Feature:** `specs/004-platinum-tier/spec.md`
+- **Implementation Plan:** `specs/004-platinum-tier/plan.md`
+- **Tasks:** `specs/004-platinum-tier/tasks.md`
 - **Dashboard:** `AI_Employee_Vault/Dashboard.md`
 - **Handbook:** `AI_Employee_Vault/Company_Handbook.md`

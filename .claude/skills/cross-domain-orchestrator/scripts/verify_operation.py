@@ -14,7 +14,7 @@ def verify():
 
     # Check skill directories
     skill_dir = Path(".claude/skills")
-    required_skills = ["xero-accounting", "social-media-suite", "ceo-briefing"]
+    required_skills = ["odoo-accounting", "social-media-suite", "ceo-briefing"]
 
     for skill in required_skills:
         skill_path = skill_dir / skill / "SKILL.md"

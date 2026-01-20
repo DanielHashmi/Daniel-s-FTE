@@ -21,7 +21,7 @@ description: "WHAT: Coordinate operations across Personal and Business domains, 
 - Personal files
 
 ### Business Domain
-- Xero (accounting)
+- Odoo (accounting)
 - LinkedIn (professional networking)
 - Facebook/Instagram/Twitter (social media)
 - Business calendar
@@ -96,7 +96,7 @@ domains:
     gmail: enabled
     whatsapp: enabled
   business:
-    xero: enabled
+    odoo: enabled
     linkedin: enabled
     social: enabled
 
