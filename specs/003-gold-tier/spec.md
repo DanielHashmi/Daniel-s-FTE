@@ -3,7 +3,7 @@
 **Feature Branch**: `003-gold-tier`
 **Created**: 2026-01-19
 **Status**: Draft
-**Input**: User description: "Implement Gold Tier Autonomous Employee with full cross-domain integration, accounting (Xero), social media (Facebook/Instagram/Twitter), weekly business audit, CEO briefing, error recovery, comprehensive audit logging, and Ralph Wiggum loop for autonomous multi-step task completion"
+**Input**: User description: "Implement Gold Tier Autonomous Employee with full cross-domain integration, accounting (Odoo 19), social media (Facebook/Instagram/Twitter), weekly business audit, CEO briefing, error recovery, comprehensive audit logging, and Ralph Wiggum loop for autonomous multi-step task completion"
 
 ## Overview
 
@@ -31,18 +31,18 @@ As a business owner, I need the AI Employee to autonomously complete complex mul
 
 ### User Story 2 - Accounting Integration and Financial Intelligence (Priority: P1)
 
-As a business owner, I need the AI Employee to integrate with my Xero accounting system to automatically track revenue, expenses, and financial transactions, so that I have real-time visibility into business finances and can make data-driven decisions without manual bookkeeping.
+As a business owner, I need the AI Employee to integrate with my Odoo 19 (Community Edition) accounting system to automatically track revenue, expenses, and financial transactions, so that I have real-time visibility into business finances and can make data-driven decisions without manual bookkeeping.
 
 **Why this priority**: Financial intelligence is critical for business operations and decision-making. Accounting integration provides the data foundation for the CEO Briefing feature and enables automated financial tracking. This is P1 because it's a prerequisite for the weekly business audit and delivers immediate value through automated bookkeeping.
 
-**Independent Test**: Can be tested by configuring Xero API credentials, triggering a transaction sync, verifying that revenue and expense data is retrieved and stored in the vault, and confirming that financial summaries are generated accurately. Delivers value by eliminating manual financial data entry and providing real-time financial visibility.
+**Independent Test**: Can be tested by configuring Odoo API credentials, triggering a transaction sync, verifying that revenue and expense data is retrieved and stored in the vault, and confirming that financial summaries are generated accurately. Delivers value by eliminating manual financial data entry and providing real-time financial visibility.
 
 **Acceptance Scenarios**:
 
-1. **Given** Xero API credentials are configured in environment variables, **When** the accounting sync process runs, **Then** the system authenticates with Xero, retrieves all transactions from the past 30 days, and stores them in structured format in the vault's Accounting/ folder
-2. **Given** new transactions exist in Xero since the last sync, **When** the scheduled sync runs (daily at 6 AM), **Then** only new transactions are retrieved, duplicate detection prevents re-importing existing transactions, and the sync completes in under 2 minutes for up to 1000 transactions
-3. **Given** transaction data includes invoices, payments, and expenses, **When** the system categorizes transactions, **Then** each transaction is tagged with type (revenue/expense), category (based on Xero chart of accounts), client/vendor name, amount, and date
-4. **Given** a Xero API call fails due to rate limiting, **When** the error occurs, **Then** the system logs the rate limit error, waits for the specified retry-after period, and automatically retries the request without losing data or requiring manual intervention
+1. **Given** Odoo API credentials (URL, Database, User, API Key) are configured in environment variables, **When** the accounting sync process runs, **Then** the system authenticates with Odoo using the JSON-2 API (or XML-RPC fallback), retrieves all transactions from the past 30 days, and stores them in structured format in the vault's Accounting/ folder
+2. **Given** new transactions exist in Odoo since the last sync, **When** the scheduled sync runs (daily at 6 AM), **Then** only new transactions are retrieved, duplicate detection prevents re-importing existing transactions, and the sync completes in under 2 minutes for up to 1000 transactions
+3. **Given** transaction data includes invoices, payments, and expenses, **When** the system categorizes transactions, **Then** each transaction is tagged with type (revenue/expense), category (based on Odoo chart of accounts), client/vendor name, amount, and date
+4. **Given** an Odoo API call fails due to connection issues, **When** the error occurs, **Then** the system logs the error, waits for the specified retry-after period, and automatically retries the request without losing data or requiring manual intervention
 5. **Given** financial data exists in the vault for the current month, **When** a financial summary is requested, **Then** the system calculates total revenue, total expenses, net profit, top clients by revenue, and largest expense categories, presenting results in a structured markdown report
 
 ---
@@ -58,7 +58,7 @@ As a business owner, I need the AI Employee to automatically generate a comprehe
 **Acceptance Scenarios**:
 
 1. **Given** the system is configured to generate CEO Briefings every Monday at 7 AM, **When** Monday 7 AM arrives, **Then** the briefing generation process runs automatically, analyzes data from the past 7 days, and creates a briefing file in the Briefings/ folder within 5 minutes
-2. **Given** financial data exists in Xero for the past week, **When** the briefing is generated, **Then** the revenue section includes total weekly revenue, month-to-date revenue, progress toward monthly goal (percentage), and trend indicator (on track/behind/ahead)
+2. **Given** financial data exists in Odoo for the past week, **When** the briefing is generated, **Then** the revenue section includes total weekly revenue, month-to-date revenue, progress toward monthly goal (percentage), and trend indicator (on track/behind/ahead)
 3. **Given** task files exist in the Done/ folder from the past week, **When** the briefing analyzes completed tasks, **Then** it lists all completed tasks with completion dates, identifies tasks that took longer than expected (based on historical averages), and highlights any tasks that missed deadlines
 4. **Given** subscription transactions exist in the accounting data, **When** the briefing analyzes costs, **Then** it identifies recurring subscriptions, flags subscriptions with no recent usage activity (based on login tracking or transaction patterns), and suggests cancellation candidates with cost savings estimates
 5. **Given** upcoming deadlines exist in the Business_Goals.md file, **When** the briefing is generated, **Then** it includes a section listing deadlines in the next 14 days, calculates days remaining for each, and flags any deadlines at risk based on current progress
@@ -140,8 +140,8 @@ As a developer or business owner, I need comprehensive documentation of the AI E
 ### Edge Cases
 
 - What happens when the Ralph Wiggum loop encounters a step that requires human approval but the approval expires before being granted?
-- How does the system handle Xero API authentication when the OAuth token expires during a sync operation?
-- What happens when the CEO Briefing generation runs but no financial data is available (Xero not configured or sync failed)?
+- How does the system handle Odoo API authentication when the connection is lost during a sync operation?
+- What happens when the CEO Briefing generation runs but no financial data is available (Odoo not configured or sync failed)?
 - How does the system handle posting to social media when one platform is down but others are operational?
 - What happens when audit log files become corrupted or the Logs/ folder runs out of disk space?
 - How does the system handle conflicting scheduled tasks (e.g., CEO Briefing generation and accounting sync both scheduled for 7 AM)?
@@ -164,17 +164,17 @@ As a developer or business owner, I need comprehensive documentation of the AI E
 - **FR-006**: System MUST pause execution when human approval is required and automatically resume after approval is granted
 - **FR-007**: System MUST create detailed human review requests when maximum iterations are reached without completion
 
-#### Accounting Integration (Xero)
+#### Accounting Integration (Odoo 19)
 
-- **FR-008**: System MUST integrate with Xero accounting system via official Xero MCP Server
-- **FR-009**: System MUST authenticate with Xero using OAuth 2.0 with token refresh capability
-- **FR-010**: System MUST sync transactions from Xero on a configurable schedule (default: daily at 6 AM)
-- **FR-011**: System MUST retrieve invoices, payments, expenses, and bank transactions from Xero
+- **FR-008**: System MUST integrate with Odoo 19 (Community Edition) accounting system via Agent Skill using JSON-2 or JSON-RPC API
+- **FR-009**: System MUST authenticate with Odoo using API Key Authentication for secure access
+- **FR-010**: System MUST sync transactions from Odoo on a configurable schedule (default: daily at 6 AM)
+- **FR-011**: System MUST retrieve invoices, payments, expenses, and bank transactions from Odoo
 - **FR-012**: System MUST store financial data in structured format in vault's Accounting/ folder
 - **FR-013**: System MUST detect and prevent duplicate transaction imports
 - **FR-014**: System MUST categorize transactions by type (revenue/expense), category, client/vendor, amount, and date
 - **FR-015**: System MUST calculate financial summaries including total revenue, total expenses, net profit, and category breakdowns
-- **FR-016**: System MUST handle Xero API rate limits with automatic retry and backoff
+- **FR-016**: System MUST handle Odoo API connection errors with automatic retry and backoff
 
 #### Weekly CEO Briefing
 
@@ -236,7 +236,7 @@ As a developer or business owner, I need comprehensive documentation of the AI E
 ### Key Entities
 
 - **Task Execution State**: Represents the current state of a multi-step task including iteration count, completed steps, pending steps, errors encountered, and completion status
-- **Financial Transaction**: Represents a business transaction from Xero including transaction ID, type (invoice/payment/expense), amount, date, client/vendor, category, and reconciliation status
+- **Financial Transaction**: Represents a business transaction from Odoo including transaction ID, type (invoice/payment/expense), amount, date, client/vendor, category, and reconciliation status
 - **CEO Briefing**: Represents a weekly business intelligence report including revenue summary, task analysis, bottleneck identification, cost optimization suggestions, and deadline tracking
 - **Audit Log Entry**: Represents a single logged action including timestamp, action type, actor, target, parameters, approval status, result, duration, and error details if applicable
 - **Social Media Post**: Represents a scheduled or published social media update including platform, content, media attachments, post URL, publication timestamp, and engagement metrics
@@ -250,7 +250,7 @@ As a developer or business owner, I need comprehensive documentation of the AI E
 - **SC-001**: AI Employee completes multi-step tasks (5+ steps) autonomously without human intervention between steps in 95% of cases
 - **SC-002**: System recovers automatically from transient errors (network timeouts, rate limits) in 90% of cases without human intervention
 - **SC-003**: CEO Briefing is generated automatically every Monday morning within 5 minutes of scheduled time with 100% reliability
-- **SC-004**: Financial data syncs from Xero daily with 99% success rate and zero duplicate transactions
+- **SC-004**: Financial data syncs from Odoo daily with 99% success rate and zero duplicate transactions
 - **SC-005**: Social media posts are published to all configured platforms (LinkedIn, Facebook, Instagram, Twitter) with 95% success rate
 - **SC-006**: System operates continuously for 7 days without requiring manual intervention or restart
 - **SC-007**: All external actions are logged with complete audit trail achieving 100% logging coverage
@@ -262,31 +262,31 @@ As a developer or business owner, I need comprehensive documentation of the AI E
 
 ## Assumptions
 
-- Xero account is already set up with business financial data
+- Odoo 19 Community Edition is installed and accessible (local or cloud)
 - Social media accounts (Facebook, Instagram, Twitter) are created and API access is approved
 - Business_Goals.md file is maintained with current goals, targets, and deadlines
 - Historical task data exists to establish baseline durations for bottleneck detection
 - Subscription patterns can be identified through transaction descriptions and merchant names
 - System has sufficient disk space for 90 days of audit logs (estimated 1-5 GB depending on activity)
 - Network connectivity is generally reliable with occasional transient failures
-- OAuth tokens can be refreshed programmatically without manual re-authentication
+- Odoo API Keys are generated and valid
 - Process manager (PM2 or supervisord) is configured for production deployment
 - System timezone is configured correctly for scheduled task execution
 
 ## Dependencies
 
 - **Silver Tier Completion**: All Silver Tier capabilities must be fully operational (multi-channel monitoring, planning, HITL approval, email/LinkedIn MCP)
-- **Xero MCP Server**: Official Xero MCP Server must be installed and configured
+- **Odoo 19 Instance**: Working Odoo 19 installation with Accounting module (or Invoicing for Community)
 - **Social Media APIs**: Facebook Graph API, Instagram Graph API, and Twitter API v2 access must be approved
 - **Process Manager**: PM2 or supervisord must be installed for watchdog functionality
-- **OAuth 2.0 Libraries**: Libraries for handling OAuth token refresh must be available
+- **OAuth 2.0 Libraries**: Libraries for handling social media token refresh must be available
 - **Disk Space**: Sufficient storage for audit logs, financial data, and briefing archives
 - **Scheduled Task System**: Cron (Linux/Mac) or Task Scheduler (Windows) for scheduled operations
 
 ## Out of Scope
 
 - Real-time financial analytics dashboard (beyond weekly briefing)
-- Integration with accounting systems other than Xero
+- Integration with accounting systems other than Odoo
 - Social media engagement tracking and analytics (beyond basic post metrics)
 - Multi-user access control and permissions
 - Mobile app or web interface for system management
@@ -299,7 +299,7 @@ As a developer or business owner, I need comprehensive documentation of the AI E
 
 ## Security Considerations
 
-- OAuth tokens for Xero and social media platforms must be stored securely using OS-native credential storage
+- API Keys for Odoo and social media platforms must be stored securely using OS-native credential storage (or .env for CLI)
 - Audit logs must sanitize sensitive data (passwords, tokens, API keys) before writing
 - Financial data must be encrypted at rest in the vault
 - Social media posting must require human approval for all posts to prevent unauthorized brand communications

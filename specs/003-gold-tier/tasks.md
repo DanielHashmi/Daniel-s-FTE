@@ -61,27 +61,27 @@ description: "Task list for Gold Tier Autonomous Employee implementation"
 
 ## Phase 4: User Story 2 - Accounting Integration and Financial Intelligence (Priority: P1)
 
-**Goal**: Integrate with Xero accounting system to automatically track revenue, expenses, and financial transactions.
+**Goal**: Integrate with Odoo 19 accounting system to automatically track revenue, expenses, and financial transactions.
 
-**Independent Test**: Configure Xero API credentials, trigger a transaction sync, verify revenue and expense data is retrieved and stored in vault, confirm financial summaries are generated accurately.
+**Independent Test**: Configure Odoo API credentials, trigger a transaction sync, verify revenue and expense data is retrieved and stored in vault, confirm financial summaries are generated accurately.
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Create Xero MCP server in src/mcp/xero_server.py with OAuth 2.0 authentication
-- [ ] T021 [P] [US2] Implement transaction sync method in src/mcp/xero_server.py to retrieve invoices, payments, expenses from Xero API
-- [ ] T022 [P] [US2] Implement duplicate detection logic in src/mcp/xero_server.py to skip already-imported transactions
+- [ ] T020 [P] [US2] Create Odoo MCP server in src/mcp/odoo_server.py with JSON-2/XML-RPC authentication
+- [ ] T021 [P] [US2] Implement transaction sync method in src/mcp/odoo_server.py to retrieve invoices, payments, expenses from Odoo API
+- [ ] T022 [P] [US2] Implement duplicate detection logic in src/mcp/odoo_server.py to skip already-imported transactions
 - [ ] T023 [P] [US2] Create transaction storage utility in src/lib/vault.py to write transactions to AI_Employee_Vault/Accounting/transactions/{YYYY-MM}/transactions.json
-- [ ] T024 [US2] Implement transaction categorization in src/mcp/xero_server.py to tag by type, category, client/vendor
-- [ ] T025 [US2] Implement rate limit handling in src/mcp/xero_server.py with exponential backoff using src/lib/retry.py
-- [ ] T026 [US2] Implement OAuth token refresh in src/mcp/xero_server.py using src/lib/oauth.py
+- [ ] T024 [US2] Implement transaction categorization in src/mcp/odoo_server.py to tag by type, category, client/vendor
+- [ ] T025 [US2] Implement rate limit handling in src/mcp/odoo_server.py with exponential backoff using src/lib/retry.py
+- [ ] T026 [US2] Implement session management in src/mcp/odoo_server.py (API Key / Login)
 - [ ] T027 [US2] Create financial summary calculator in src/skills/accounting_sync/summary.py to compute revenue, expenses, net profit
-- [X] T028 [US2] Create accounting-sync Agent Skill definition in .claude/skills/accounting-sync/skill.json *(Created as .claude/skills/xero-accounting/SKILL.md with full implementation)*
+- [X] T028 [US2] Create accounting-sync Agent Skill definition in .claude/skills/accounting-sync/skill.json *(Created as .claude/skills/odoo-accounting/SKILL.md with full implementation)*
 - [ ] T029 [US2] Create accounting-sync Agent Skill implementation in src/skills/accounting_sync/main.py
 - [ ] T030 [US2] Create accounting-sync scheduler in src/skills/accounting_sync/scheduler.py for daily 6 AM sync
-- [ ] T031 [US2] Add Xero MCP server to Claude Code configuration in ~/.config/claude-code/mcp.json
-- [ ] T032 [US2] Create integration test in tests/integration/test_xero_sync.py to verify transaction sync and duplicate detection
+- [ ] T031 [US2] Add Odoo MCP server to Claude Code configuration in ~/.config/claude-code/mcp.json
+- [ ] T032 [US2] Create integration test in tests/integration/test_odoo_sync.py to verify transaction sync and duplicate detection
 
-**Checkpoint**: Xero integration functional - financial data syncs automatically
+**Checkpoint**: Odoo integration functional - financial data syncs automatically
 
 ---
 

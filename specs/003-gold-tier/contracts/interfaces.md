@@ -12,15 +12,15 @@ This document defines the interfaces for Agent Skills and MCP servers in the Gol
 
 ## Agent Skills Interfaces
 
-### 1. Accounting Sync Skill (`/accounting-sync`)
+### 1. Accounting Sync Skill (`/odoo-accounting`)
 
-**Purpose**: Sync financial transactions from Xero accounting system to local vault.
+**Purpose**: Sync financial transactions from Odoo accounting system to local vault.
 
-**Skill Definition** (`.claude/skills/accounting-sync/skill.json`):
+**Skill Definition** (`.claude/skills/odoo-accounting/skill.json`):
 ```json
 {
-  "name": "accounting-sync",
-  "description": "Sync financial transactions from Xero accounting system",
+  "name": "odoo-accounting",
+  "description": "Sync financial transactions from Odoo accounting system",
   "version": "1.0.0",
   "parameters": {
     "period": {
@@ -50,13 +50,13 @@ This document defines the interfaces for Agent Skills and MCP servers in the Gol
 
 **Usage**:
 ```bash
-/accounting-sync period=current_month
-/accounting-sync period=2026-01 force_full_sync=true
-/accounting-sync dry_run=true
+/odoo-accounting period=current_month
+/odoo-accounting period=2026-01 force_full_sync=true
+/odoo-accounting dry_run=true
 ```
 
 **Implementation Contract**:
-- MUST authenticate with Xero using OAuth 2.0
+- MUST authenticate with Odoo using API Key
 - MUST detect and skip duplicate transactions
 - MUST store transactions in `AI_Employee_Vault/Accounting/transactions/{YYYY-MM}/`
 - MUST log all API calls in audit log
@@ -327,59 +327,74 @@ This document defines the interfaces for Agent Skills and MCP servers in the Gol
 
 ## MCP Server Interfaces
 
-### 1. Xero MCP Server
+### 1. Odoo MCP Server
 
-**Server Name**: `xero-mcp`
+**Server Name**: `odoo-mcp`
 
-**Capabilities**:
+**Purpose**: Provides tool-use access to Odoo 19 accounting data for the AI Employee.
+
+**Configuration**:
 ```json
 {
-  "name": "xero-mcp",
-  "version": "1.0.0",
-  "capabilities": {
-    "resources": [
-      {
-        "uri": "xero://transactions",
-        "name": "Xero Transactions",
-        "description": "Access Xero accounting transactions"
-      },
-      {
-        "uri": "xero://invoices",
-        "name": "Xero Invoices",
-        "description": "Access Xero invoices"
-      }
-    ],
-    "tools": [
-      {
-        "name": "sync_transactions",
-        "description": "Sync transactions from Xero",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "period": {"type": "string"},
-            "transaction_types": {"type": "array"}
-          }
-        }
-      },
-      {
-        "name": "get_financial_summary",
-        "description": "Get financial summary for period",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "start_date": {"type": "string"},
-            "end_date": {"type": "string"}
-          }
-        }
-      }
-    ]
+  "odoo": {
+    "command": "python3",
+    "args": ["src/mcp/odoo_server.py"],
+    "env": {
+      "ODOO_URL": "...",
+      "ODOO_DB": "...",
+      "ODOO_USER": "...",
+      "ODOO_PASSWORD": "..."
+    }
   }
 }
 ```
 
-**Authentication**: OAuth 2.0 with token refresh
+**Resources**:
 
-**Rate Limits**: TBD (requires Xero developer portal access)
+- `odoo://transactions`
+  - **Name**: Odoo Transactions
+  - **Description**: Access Odoo accounting transactions (invoices, payments, expenses)
+  - **MIME Type**: `application/json`
+
+- `odoo://invoices`
+  - **Name**: Odoo Invoices
+  - **Description**: Access Odoo invoices
+  - **MIME Type**: `application/json`
+
+**Tools**:
+
+- `sync_transactions`
+  - **Description**: Sync transactions from Odoo
+  - **Input Schema**:
+    ```json
+    {
+      "type": "object",
+      "properties": {
+        "days": {
+          "type": "integer",
+          "description": "Number of days to sync (default: 30)"
+        }
+      }
+    }
+    ```
+
+- `get_financial_summary`
+  - **Description**: Get financial summary for a period
+  - **Input Schema**:
+    ```json
+    {
+      "type": "object",
+      "properties": {
+        "period": {
+          "type": "string",
+          "enum": ["daily", "weekly", "monthly"]
+        }
+      },
+      "required": ["period"]
+    }
+    ```
+
+**Rate Limits**: Dependent on Odoo server configuration (typically high for self-hosted).
 
 ---
 

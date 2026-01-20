@@ -71,40 +71,30 @@ running → max_iterations (when iteration limit reached)
 
 ### 2. Financial Transaction
 
-**Purpose**: Represents a business transaction from Xero accounting system.
+**Purpose**: Represents a business transaction from Odoo 19 accounting system.
 
 **Storage Location**: `AI_Employee_Vault/Accounting/transactions/{YYYY-MM}/transactions.json`
 
 **Schema**:
 ```json
 {
-  "transaction_id": "string (Xero transaction ID)",
+  "transaction_id": "string (Odoo 'id' or 'move_id')",
   "type": "enum (invoice | payment | expense | bank_transaction)",
   "date": "string (ISO 8601 date)",
   "amount": "number (decimal, 2 places)",
   "currency": "string (ISO 4217 currency code, default USD)",
-  "category": "string (Xero chart of accounts category)",
+  "category": "string (Odoo chart of accounts category)",
   "client_vendor": {
-    "id": "string (Xero contact ID)",
+    "id": "string (Odoo 'partner_id')",
     "name": "string",
     "type": "enum (client | vendor)"
   },
   "description": "string",
-  "status": "enum (draft | submitted | authorised | paid | voided)",
-  "reconciliation_status": "enum (unreconciled | reconciled)",
+  "status": "enum (draft | posted | cancelled)",
+  "payment_state": "enum (not_paid | in_payment | paid | partial | reversed)",
   "invoice_number": "string (optional, for invoices)",
   "reference": "string (optional, payment reference)",
-  "line_items": [
-    {
-      "description": "string",
-      "quantity": "number",
-      "unit_amount": "number",
-      "account_code": "string",
-      "tax_type": "string"
-    }
-  ],
-  "synced_at": "string (ISO 8601 timestamp)",
-  "last_modified": "string (ISO 8601 timestamp from Xero)"
+  "synced_at": "string (ISO 8601 timestamp)"
 }
 ```
 
@@ -395,7 +385,7 @@ approved → failed (when posting fails)
   "frequency": "enum (monthly | quarterly | annual)",
   "first_detected": "string (ISO 8601 date)",
   "last_transaction_date": "string (ISO 8601 date)",
-  "transaction_ids": ["array of Xero transaction IDs"],
+  "transaction_ids": ["array of Odoo transaction IDs"],
   "usage_tracking": {
     "last_login_date": "string (optional, ISO 8601 date)",
     "activity_count_30d": "integer (optional)",
@@ -421,13 +411,13 @@ approved → failed (when posting fails)
 **Pattern Matching Rules**:
 ```python
 SUBSCRIPTION_PATTERNS = {
-    'netflix.com': 'Netflix',
-    'spotify.com': 'Spotify',
-    'adobe.com': 'Adobe Creative Cloud',
-    'notion.so': 'Notion',
-    'slack.com': 'Slack',
-    'github.com': 'GitHub',
-    'xero.com': 'Xero'
+    'netflix': 'Netflix',
+    'spotify': 'Spotify',
+    'adobe': 'Adobe Creative Cloud',
+    'notion': 'Notion',
+    'slack': 'Slack',
+    'github': 'GitHub',
+    'odoo': 'Odoo Enterprise'
 }
 ```
 

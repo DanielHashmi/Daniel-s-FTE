@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Odoo Accounting Operations - Gold Tier Skill
 
-Syncs transactions, invoices, and financial data from Odoo Community Edition.
-Generates financial summaries and reports for CEO Briefing via JSON-RPC API.
+Syncs transactions, invoices, and financial data from Odoo 19 (Community Edition).
+Generates financial summaries and reports for CEO Briefing.
+
+NOTE: This script currently uses XML-RPC for compatibility with standard Python libraries.
+Odoo 19 has deprecated XML-RPC/JSON-RPC in favor of the JSON-2 API (to be enforced in Odoo 20).
+This implementation remains functional for Odoo 19 but should be migrated to JSON-2
+before Odoo 20 (Fall 2026).
 """
 import argparse
 import sys

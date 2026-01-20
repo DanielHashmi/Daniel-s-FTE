@@ -7,16 +7,16 @@
 
 ## Summary
 
-The Gold Tier transforms the AI Employee from a functional assistant into a fully autonomous business partner. Core capabilities include: (1) Ralph Wiggum loop for persistent multi-step task execution, (2) Xero accounting integration for financial intelligence, (3) automated weekly CEO Briefing with business insights, (4) comprehensive error recovery and graceful degradation, (5) expanded social media presence (Facebook, Instagram, Twitter), (6) comprehensive audit logging, and (7) architecture documentation. The system operates 24/7 with minimal human oversight, providing proactive business intelligence and strategic recommendations.
+The Gold Tier transforms the AI Employee from a functional assistant into a fully autonomous business partner. Core capabilities include: (1) Ralph Wiggum loop for persistent multi-step task execution, (2) Odoo 19 accounting integration for financial intelligence, (3) automated weekly CEO Briefing with business insights, (4) comprehensive error recovery and graceful degradation, (5) expanded social media presence (Facebook, Instagram, Twitter), (6) comprehensive audit logging, and (7) architecture documentation. The system operates 24/7 with minimal human oversight, providing proactive business intelligence and strategic recommendations.
 
 ## Technical Context
 
 **Language/Version**: Python 3.13+ (established in Bronze/Silver Tier)
 **Primary Dependencies**:
 - **Existing (Silver Tier)**: playwright, mcp, google-api-python-client, PM2/supervisord
-- **New (Gold Tier)**: NEEDS CLARIFICATION - Xero SDK, Facebook SDK, Twitter API client, Instagram API client
-- **Ralph Wiggum Loop**: NEEDS CLARIFICATION - Stop hook implementation pattern
-- **Watchdog**: NEEDS CLARIFICATION - PM2 vs supervisord vs custom Python watchdog
+- **New (Gold Tier)**: Odoo API (xmlrpc/json-2), Facebook SDK, Twitter API client, Instagram API client
+- **Ralph Wiggum Loop**: Persistent state file + recursive execution loop
+- **Watchdog**: PM2 health checks + custom Python watchdog
 
 **Storage**: File-based (Obsidian vault markdown files, JSON audit logs, no database)
 **Testing**: pytest (established), integration tests for MCP servers, contract tests for external APIs
@@ -24,7 +24,7 @@ The Gold Tier transforms the AI Employee from a functional assistant into a full
 **Project Type**: Single project (CLI/automation system with Agent Skills)
 **Performance Goals**:
 - CEO Briefing generation: < 5 minutes for weekly analysis
-- Xero transaction sync: < 2 minutes for 1000 transactions
+- Odoo transaction sync: < 2 minutes for 1000 transactions
 - Ralph Wiggum loop iteration: < 30 seconds per task step
 - Social media post scheduling: < 10 seconds per platform
 
@@ -32,7 +32,7 @@ The Gold Tier transforms the AI Employee from a functional assistant into a full
 - 24/7 autonomous operation without manual intervention
 - Graceful degradation when components fail (80% functionality with one component down)
 - 90-day audit log retention (estimated 1-5 GB storage)
-- OAuth token refresh without manual re-authentication
+- OAuth token refresh / API Key management without manual re-authentication
 - Rate limit compliance for all external APIs
 
 **Scale/Scope**:
@@ -49,7 +49,7 @@ The Gold Tier transforms the AI Employee from a functional assistant into a full
 ### I. Local-First Architecture ✅ PASS
 - **Requirement**: All sensitive data MUST remain on user's local machine
 - **Implementation**: Obsidian vault stores all data locally (financial transactions, task history, audit logs, briefings)
-- **External APIs**: Xero, Facebook, Instagram, Twitter APIs used only for necessary integrations with secure credential management
+- **External APIs**: Odoo, Facebook, Instagram, Twitter APIs used only for necessary integrations with secure credential management
 - **Compliance**: Full compliance - no cloud storage of sensitive data
 
 ### II. Human-in-the-Loop for Sensitive Actions ✅ PASS
@@ -70,7 +70,7 @@ The Gold Tier transforms the AI Employee from a functional assistant into a full
 ### IV. Security & Credential Management ✅ PASS
 - **Requirement**: Credentials MUST NEVER be stored in plain text or committed to version control
 - **Implementation**:
-  - OAuth tokens for Xero and social media in OS-native secure storage (Security Considerations section)
+  - API Keys for Odoo and social media in OS-native secure storage (Security Considerations section)
   - Audit logs sanitize sensitive data (FR-043)
   - Environment variables for API keys
 - **Compliance**: Full compliance - security considerations explicitly address credential management
@@ -121,7 +121,7 @@ The Gold Tier transforms the AI Employee from a functional assistant into a full
 ### I. Local-First Architecture ✅ PASS (Confirmed)
 - **Design Verification**: All entities in data-model.md are file-based (Markdown, JSON) stored in Obsidian vault
 - **No Cloud Dependencies**: Financial transactions, audit logs, briefings, social media posts all stored locally
-- **External APIs**: Only for necessary integrations (Xero, Facebook, Instagram, Twitter) with secure credential management
+- **External APIs**: Only for necessary integrations (Odoo, Facebook, Instagram, Twitter) with secure credential management
 - **Compliance**: Design maintains full local-first architecture
 
 ### II. Human-in-the-Loop for Sensitive Actions ✅ PASS (Confirmed)
@@ -131,7 +131,7 @@ The Gold Tier transforms the AI Employee from a functional assistant into a full
 - **Compliance**: Design enforces HITL for all sensitive actions
 
 ### III. Agent Skills First ✅ PASS (Confirmed)
-- **Design Verification**: contracts/interfaces.md defines 5 Agent Skills (accounting-sync, briefing-gen, social-ops, error-recovery, audit-mgmt)
+- **Design Verification**: contracts/interfaces.md defines 5 Agent Skills (odoo-accounting, briefing-gen, social-ops, error-recovery, audit-mgmt)
 - **All AI Functionality**: Implemented as Agent Skills per FR-054 and FR-055
 - **Compliance**: Design follows Agent Skills pattern throughout
 
@@ -201,7 +201,7 @@ src/
 ├── mcp/                     # Existing (Silver Tier) + New (Gold Tier)
 │   ├── email_server.py      # Email MCP server (existing)
 │   ├── social_server.py     # LinkedIn MCP server (existing)
-│   ├── xero_server.py       # NEW: Xero accounting MCP server
+│   ├── odoo_server.py       # NEW: Odoo accounting MCP server
 │   ├── facebook_server.py   # NEW: Facebook MCP server
 │   ├── instagram_server.py  # NEW: Instagram MCP server
 │   └── twitter_server.py    # NEW: Twitter MCP server
@@ -211,7 +211,7 @@ src/
 │   ├── retry.py             # NEW: Exponential backoff retry logic
 │   └── watchdog.py          # NEW: Process monitoring and restart
 └── skills/                  # NEW: Gold Tier Agent Skills
-    ├── accounting_sync/     # Xero transaction sync skill
+    ├── accounting_sync/     # Odoo transaction sync skill
     ├── briefing_gen/        # CEO Briefing generation skill
     ├── social_post/         # Multi-platform social media posting skill
     ├── error_recovery/      # Error recovery and graceful degradation skill
@@ -219,7 +219,7 @@ src/
 
 .claude/
 └── skills/                  # Agent Skills (Claude Code framework)
-    ├── accounting-sync/     # Xero sync skill definition
+    ├── odoo-accounting/     # Odoo sync skill definition
     ├── briefing-gen/        # CEO Briefing skill definition
     ├── social-ops/          # Social media operations (enhanced)
     ├── error-recovery/      # Error recovery skill definition
@@ -245,7 +245,7 @@ AI_Employee_Vault/           # Existing (Bronze/Silver Tier) + Enhanced (Gold Ti
 ├── Pending_Approval/        # Files awaiting human approval
 ├── Approved/                # Human-approved action files
 ├── Rejected/                # Human-rejected action files
-├── Accounting/              # NEW: Financial data from Xero
+├── Accounting/              # NEW: Financial data from Odoo
 │   ├── transactions/        # Transaction data by month
 │   └── summaries/           # Financial summary reports
 ├── Briefings/               # NEW: Weekly CEO Briefings
@@ -258,15 +258,15 @@ tests/
 │   ├── test_watchdog.py     # NEW: Watchdog tests
 │   └── test_briefing.py     # NEW: CEO Briefing generation tests
 ├── integration/             # Integration tests
-│   ├── test_xero_sync.py    # NEW: Xero integration tests
+│   ├── test_odoo_sync.py    # NEW: Odoo integration tests
 │   ├── test_social_post.py  # NEW: Social media posting tests
 │   └── test_ralph_loop.py   # NEW: Ralph Wiggum loop tests
 └── fixtures/                # Test fixtures and mock data
-    ├── xero_transactions.json
+    ├── odoo_transactions.json
     └── social_posts.json
 ```
 
-**Structure Decision**: Single project structure (Option 1) is appropriate for this CLI/automation system. The existing Bronze/Silver Tier structure is extended with new Gold Tier components (Xero MCP server, social media MCP servers, Ralph Wiggum plugin, enhanced audit logging, CEO Briefing generation). All AI functionality is implemented as Agent Skills in `.claude/skills/` following the constitution requirement.
+**Structure Decision**: Single project structure (Option 1) is appropriate for this CLI/automation system. The existing Bronze/Silver Tier structure is extended with new Gold Tier components (Odoo MCP server, social media MCP servers, Ralph Wiggum plugin, enhanced audit logging, CEO Briefing generation). All AI functionality is implemented as Agent Skills in `.claude/skills/` following the constitution requirement.
 
 ## Complexity Tracking
 
