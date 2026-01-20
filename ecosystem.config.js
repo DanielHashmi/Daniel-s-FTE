@@ -3,7 +3,7 @@ module.exports = {
     name: 'ai-orchestrator',
     script: 'src/orchestration/orchestrator.py',
     interpreter: './venv/bin/python',
-    cwd: '/mnt/c/Users/kk/Desktop/Daniel\\'s FTE',
+    cwd: process.cwd(),
     env: { PYTHONPATH: './src' },
     error_file: './AI_Employee_Vault/Logs/orchestrator-err.log',
     out_file: './AI_Employee_Vault/Logs/orchestrator-out.log',
