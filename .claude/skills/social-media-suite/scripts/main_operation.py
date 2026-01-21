@@ -12,6 +12,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 import hashlib
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv(Path(__file__).parent.parent.parent.parent.parent / ".env")
 
 # Config
 VAULT_ROOT = Path("AI_Employee_Vault")
@@ -57,7 +61,7 @@ def check_credentials(platform: str) -> bool:
     cred_map = {
         "facebook": ["META_ACCESS_TOKEN", "META_PAGE_ID"],
         "instagram": ["META_ACCESS_TOKEN", "INSTAGRAM_BUSINESS_ID"],
-        "twitter": ["TWITTER_API_KEY", "TWITTER_API_SECRET", "TWITTER_ACCESS_TOKEN", "TWITTER_ACCESS_SECRET"],
+        "twitter": ["TWITTER_API_KEY", "TWITTER_API_SECRET", "TWITTER_ACCESS_TOKEN", "TWITTER_ACCESS_TOKEN_SECRET"],
     }
     required = cred_map.get(platform, [])
     return all(os.getenv(var) for var in required)

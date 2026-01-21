@@ -6,6 +6,10 @@ Handles creating approval request files and processing results.
 
 import time
 import hashlib
+import yaml
+import subprocess
+import json
+from pathlib import Path
 from typing import Dict, Any
 from src.lib.logging import get_logger
 from src.lib.vault import vault
@@ -60,17 +64,79 @@ context:
         try:
             # Read file to get context
             content = vault.read_file(filepath)
+            
+            # Parse YAML frontmatter
+            parts = content.split("---")
+            if len(parts) < 3:
+                self.logger.error(f"Invalid approval file format: {filepath.name}")
+                return
+
+            metadata = yaml.safe_load(parts[1])
+            body = parts[2].strip()
 
             # Log the approval decision
             self.logger.log_approval_decision(
                 decision="approved",
                 action_file=str(filepath),
-                reason="Human approved via manage-approval skill"
+                reason="Human approved via file move to Approved/"
             )
 
-            # Execute the action (or trigger orchestrator to do it)
-            # For now, just log that it would be executed
-            self.logger.info(f"Approved action ready for execution: {filepath.name}")
+            # Execution logic
+            action = metadata.get("action") or metadata.get("action_type")
+            platform = metadata.get("platform")
+
+            if action == "social_post" and platform == "twitter":
+                # Extract content from body
+                # The body has headers like ## Content
+                lines = body.split("\n")
+                content_lines = []
+                in_content = False
+                for line in lines:
+                    if line.startswith("## Content"):
+                        in_content = True
+                        continue
+                    elif line.startswith("##") and in_content:
+                        break
+                    
+                    if in_content:
+                        content_lines.append(line)
+                
+                tweet_text = "\n".join(content_lines).strip()
+                if not tweet_text:
+                    tweet_text = body.split("\n")[0] # Fallback to first line
+
+                self.logger.info(f"Executing tweet: {tweet_text[:50]}...")
+                
+                # Call social-mcp
+                mcp_path = Path("mcp-servers/social-mcp/index.js")
+                if mcp_path.exists():
+                    rpc_call = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "call_tool",
+                        "params": {
+                            "name": "post_to_twitter",
+                            "arguments": {"content": tweet_text}
+                        }
+                    }
+                    
+                    # Run node command
+                    try:
+                        result = subprocess.run(
+                            ["node", str(mcp_path)],
+                            input=json.dumps(rpc_call),
+                            text=True,
+                            capture_output=True,
+                            check=True
+                        )
+                        self.logger.info(f"Tweet execution result: {result.stdout}")
+                    except subprocess.CalledProcessError as e:
+                        self.logger.error(f"Tweet execution failed: {e.stderr}")
+                else:
+                    self.logger.error("social-mcp server not found")
+
+            else:
+                self.logger.info(f"Approved action ready for execution (No automatic handler): {filepath.name}")
 
         except Exception as e:
             self.logger.error(f"Error processing approved file {filepath}: {e}")

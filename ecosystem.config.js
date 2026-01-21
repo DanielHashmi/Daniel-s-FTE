@@ -4,7 +4,7 @@ module.exports = {
     script: 'src/orchestration/orchestrator.py',
     interpreter: './venv/bin/python',
     cwd: process.cwd(),
-    env: { PYTHONPATH: './src' },
+    env: { PYTHONPATH: '.' },
     error_file: './AI_Employee_Vault/Logs/orchestrator-err.log',
     out_file: './AI_Employee_Vault/Logs/orchestrator-out.log',
     log_date_format: 'YYYY-MM-DD HH:mm Z'
