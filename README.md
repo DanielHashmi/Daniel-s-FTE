@@ -1,23 +1,80 @@
-# AI Employee - Silver Tier Functional Assistant
+# AI Employee - Platinum Tier Production Assistant
 
-**Version**: 0.2.0
-**Status**: ✅ Production Ready
-**Branch**: `002-silver-tier`
+**Version**: 0.4.0
+**Status**: ✅ Production Ready (Platinum Tier)
+**Branch**: `004-platinum-tier`
 
 ## Overview
 
-The Personal AI Employee system is a local-first, autonomous assistant that monitors multiple input sources (Gmail, WhatsApp, LinkedIn), creates structured plans, and executes approved actions via MCP servers. This Silver Tier implementation is a fully functional assistant capable of real-world interactions under human supervision.
+The Personal AI Employee system is a local-first, autonomous assistant that operates 24/7 across Cloud and Local environments. It proactively manages personal and business affairs using Claude Code as the reasoning engine and Obsidian as the management dashboard.
+
+This Platinum Tier implementation features domain-specific specialization (Cloud owns triage/drafting, Local owns approvals/execution), full Odoo accounting integration, and autonomous multi-step task completion via the Ralph Wiggum loop.
 
 ### Key Features
 
-- **Local-First Architecture**: All data stays on your machine in the AI Employee Vault
-- **Multi-Channel Monitoring**: Monitors Gmail, WhatsApp, and LinkedIn for new work
-- **Intelligent Planning**: Autonomously creates execution plans for incoming tasks
-- **HITL Approval Workflow**: Sensitive actions require explicit human approval
-- **MCP Integrations**: Modular servers for Email sending and LinkedIn posting
-- **Agent Skills**: Reusable capabilities for all AI operations
-- **Audit Logging**: Comprehensive JSON logs for all system activities
-- **Production Ready**: PM2-managed processes with auto-restart and monitoring
+- **Domain Specialization**: Cloud agent handles 24/7 triage and draft generation; Local agent handles sensitive execution and approvals.
+- **Ralph Wiggum Loop**: Persistent autonomous iteration until complex multi-step tasks are completed.
+- **Odoo Accounting Sync**: Automated sync with Odoo Community for financial auditing and invoice management.
+- **Multi-Channel Monitoring**: Monitors Gmail, WhatsApp, and LinkedIn for new work.
+- **HITL Approval Workflow**: Security-first design where sensitive actions require explicit human approval.
+- **Synced Vault (Local-First)**: Synchronized markdown knowledge base using Git/Syncthing with strict secret isolation.
+- **Monday Morning CEO Briefing**: Automated weekly audits of revenue, bottlenecks, and costs.
+- **Audit Logging**: Comprehensive JSON logs for every system action and human decision.
+- **Production Infrastructure**: Robust process management with PM2 and automatic recovery.
+
+## Quick Start (Platinum)
+
+### Prerequisites
+
+- **Python 3.12+**
+- **Node.js 20+**
+- **Docker** (for Odoo Community deployment)
+- **PM2** (`npm install -g pm2`)
+
+### Deployment
+
+1. **Local Setup**:
+   ```bash
+   # Clone and setup vault
+   ./setup-vault.sh
+   pm2 start ecosystem.config.js
+   ```
+
+2. **Cloud Setup**:
+   ```bash
+   # On your Cloud VM (Oracle/AWS)
+   cd deployment/cloud
+   ./setup.sh --test
+   docker-compose up -d  # Start Odoo
+   pm2 start ecosystem.config.js
+   ```
+
+3. **Sync Configuration**:
+   Configure Syncthing or Git between your Local and Cloud `AI_Employee_Vault` directories. Ensure `.env` files are excluded.
+
+## System Architecture
+
+```
+[ CLOUD DOMAIN ]                    [ LOCAL DOMAIN ]
+Cloud Agent (Always-On) <---------> Local Agent (Executive)
+- Email Triage                      - HITL Approvals
+- Draft Generation                  - WhatsApp Session
+- Odoo Draft Accounting             - Payments & Posting
+- Social Scheduling                 - Final Audit & Dashboard
+```
+
+## Documentation
+
+### Tiered Deliverables
+- **[Platinum Tier Spec](specs/004-platinum-tier/spec.md)** - Full production requirements
+- **[Odoo Integration](docs/guides/odoo-integration-guide.md)** - ERP setup and MCP usage
+- **[Handover Logic](specs/004-platinum-tier/plan.md)** - Cloud-to-Local workflow details
+
+### Core Documentation
+- **[Quickstart Guide](specs/001-bronze-tier-foundation/quickstart.md)**
+- **[Testing Scenarios](specs/004-platinum-tier/tasks.md)**
+- **[Architecture ADRs](history/prompts/004-platinum-tier/)**
+
 
 ## Quick Start
 

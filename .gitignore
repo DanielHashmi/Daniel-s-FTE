@@ -133,3 +133,14 @@ AI_Employee_Vault/.obsidian/workspace-mobile.json
 # Test output files
 /tmp/
 *.output
+
+# Node modules
+**/node_modules/
+**/.package-lock.json
+
+
+# Tests and demos (ad-hoc)
+
+# MCP servers (external/runtime)
+mcp-servers/node_modules/
+mcp-servers/*.lock

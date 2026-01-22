@@ -135,6 +135,25 @@ context:
                 else:
                     self.logger.error("social-mcp server not found")
 
+            elif metadata.get('type') == 'invoice_posting' and action == 'post':
+                invoice_id = metadata.get('invoice_id')
+                if invoice_id:
+                    self.logger.info(f"Executing Odoo invoice post: {invoice_id}")
+                    try:
+                        # Call main_operation.py directly
+                        script_path = Path(".claude/skills/odoo-accounting/scripts/main_operation.py")
+                        result = subprocess.run(
+                            ["python3", str(script_path), "--mode", "live", "post", str(invoice_id), "--no-approval"],
+                            text=True,
+                            capture_output=True,
+                            check=True
+                        )
+                        self.logger.info(f"Invoice post result: {result.stdout}")
+                    except subprocess.CalledProcessError as e:
+                        self.logger.error(f"Invoice post failed: {e.stderr}")
+                else:
+                    self.logger.error("Missing invoice_id in approval metadata")
+
             else:
                 self.logger.info(f"Approved action ready for execution (No automatic handler): {filepath.name}")
 
