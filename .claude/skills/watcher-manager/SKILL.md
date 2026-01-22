@@ -5,21 +5,66 @@ description: "WHAT: Manage watcher processes (start, stop, restart, status) usin
 
 # Watcher Manager
 
+## Production Architecture Note
+
+In the production deployment, all watchers (Gmail, WhatsApp, LinkedIn) run as threads inside the **ai-orchestrator** process. There are no separate watcher processes. The orchestrator manages all watchers internally.
+
 ## When to Use
-- Starting watcher for first time or after system restart
-- Stopping watcher for maintenance or troubleshooting
-- Checking if watcher is running and healthy
-- Restarting watcher after configuration changes
+- Starting the orchestrator (which starts all watchers)
+- Stopping the orchestrator for maintenance
+- Checking if the orchestrator and watchers are running
+- Restarting the orchestrator after configuration changes
 
 ## Instructions
-1. Execute watcher command: `python3 scripts/main_operation.py --action [start|stop|restart|status] [--watcher-type filesystem|gmail] [--vault-path AI_Employee_Vault]`
-2. Verify watcher state: `python3 scripts/verify_operation.py`
-3. Check Dashboard.md for updated watcher status.
+
+### Check Status
+```bash
+pm2 status
+```
+Look for `ai-orchestrator` process status (should be "online").
+
+### Start Orchestrator (starts all watchers)
+```bash
+pm2 start ecosystem.config.js
+```
+
+### Stop Orchestrator (stops all watchers)
+```bash
+pm2 stop ai-orchestrator
+```
+
+### Restart Orchestrator (restarts all watchers)
+```bash
+pm2 restart ai-orchestrator
+```
+
+### View Orchestrator Logs
+```bash
+pm2 logs ai-orchestrator --lines 50
+```
+
+### Check Watcher Status in Dashboard
+```bash
+cat AI_Employee_Vault/Dashboard.md
+```
 
 ## Validation
-- [ ] Watcher process started/stopped successfully
-- [ ] PM2 shows correct process status
-- [ ] Dashboard.md updated with watcher status
-- [ ] No errors in watcher logs
+- [ ] ai-orchestrator process shows "online" in PM2
+- [ ] Dashboard.md shows watchers as "running"
+- [ ] No errors in orchestrator logs
+- [ ] Orchestrator uptime is stable (not restarting repeatedly)
 
-See [REFERENCE.md](./REFERENCE.md) for PM2 configuration and troubleshooting.
+## Troubleshooting
+
+If orchestrator is crashing:
+```bash
+# Check error logs
+pm2 logs ai-orchestrator --err --lines 50
+
+# Restart fresh
+pm2 restart ai-orchestrator
+
+# If still failing, see SETUP_TROUBLESHOOTING.md
+```
+
+See [REFERENCE.md](./REFERENCE.md) for PM2 configuration and detailed troubleshooting.
