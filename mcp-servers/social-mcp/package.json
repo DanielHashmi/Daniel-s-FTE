@@ -1,0 +1,14 @@
+{
+  "name": "social-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for Social Media Operations",
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "dotenv": "^16.3.1",
+    "twitter-api-v2": "^1.15.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
