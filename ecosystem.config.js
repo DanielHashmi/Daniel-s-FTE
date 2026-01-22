@@ -14,5 +14,8 @@ module.exports = {
   }, {
     name: 'mcp-social',
     script: './mcp-servers/social-mcp/index.js'
+  }, {
+    name: 'mcp-odoo',
+    script: './deployment/cloud/odoo-mcp.js'
   }]
 };

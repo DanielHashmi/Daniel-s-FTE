@@ -51,8 +51,10 @@ class GmailWatcher(BaseWatcher):
         if not self.creds and os.path.exists(credentials_path):
             try:
                 self.logger.info("Starting OAuth flow for Gmail authentication...")
+                self.logger.info("NOTE: If running on WSL/Headless, follow the link in console.")
                 flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-                self.creds = flow.run_local_server(port=0)
+                # Fix for WSL/Headless hang: don't try to open browser automatically
+                self.creds = flow.run_local_server(port=0, open_browser=False)
 
                 # Save the credentials for future runs
                 with open(token_path, 'w') as token:

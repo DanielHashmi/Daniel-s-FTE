@@ -15,6 +15,10 @@ from typing import Dict, Optional, Any, List
 from xmlrpc.client import ServerProxy
 import argparse
 import csv
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(Path(__file__).parent.parent.parent.parent.parent / ".env")
 
 # Config
 VAULT_ROOT = Path(os.getenv('VAULT_ROOT', 'AI_Employee_Vault'))

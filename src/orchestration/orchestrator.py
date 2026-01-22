@@ -14,13 +14,14 @@ from src.lib.logging import get_logger
 from src.lib.vault import vault
 
 # Import Watchers
-# from src.watchers.gmail import GmailWatcher  # DISABLED: WSL google-cloud stat() hang
+from src.watchers.gmail import GmailWatcher 
 from src.watchers.whatsapp import WhatsAppWatcher
 from src.watchers.linkedin import LinkedInWatcher
 
 # Import Plan Manager & Approval Manager
 from src.orchestration.plan_manager import PlanManager
 from src.orchestration.approval_manager import ApprovalManager
+from src.handlers.local_approval import LocalApprovalHandler
 from src.orchestration.watchdog import Watchdog
 from src.orchestration.dashboard_manager import DashboardManager
 from src.orchestration.ralph_loop import RalphLoopManager
@@ -33,7 +34,7 @@ class Orchestrator:
 
         # Initialize watchers
         self.watchers = [
-            # GmailWatcher(interval=60),  # DISABLED: WSL google-cloud stat() hang
+            GmailWatcher(interval=60), 
             WhatsAppWatcher(interval=60),
             LinkedInWatcher(interval=300)
         ]
@@ -42,14 +43,16 @@ class Orchestrator:
         # Initialize Managers
         self.plan_manager = PlanManager()
         self.approval_manager = ApprovalManager()
+        self.local_approval_handler = LocalApprovalHandler(str(vault.root))
         self.watchdog = Watchdog()
         self.dashboard_manager = DashboardManager()
         self.ralph_manager = RalphLoopManager()
         self.ralph_manager.integrate_with_orchestrator(self)
+        
         self.last_health_check = 0
         self.last_dashboard_update = 0
+        self.last_odoo_sync = 0
         self.recent_activity = []
-
 
     def start_watchers(self):
         """Start all watchers in separate threads."""
@@ -95,16 +98,24 @@ class Orchestrator:
         # 2. Check for Pending Approvals (State changes)
         self.check_approvals()
 
-        # 3. Check for Active Plans (Execution monitoring)
+        # 3. Check for Handover Drafts (US1: Cloud-to-Local)
+        self.check_handovers()
+
+        # 4. Check for Active Plans (Execution monitoring)
         self.check_active_plans()
 
-        # 4. Watchdog / Health Check (Every 60s)
+        # 5. Odoo Daily Sync (Every 24h or manual trigger)
         current_time = time.time()
+        if current_time - self.last_odoo_sync > 86400: # 24 hours
+            self.sync_odoo()
+            self.last_odoo_sync = current_time
+
+        # 6. Watchdog / Health Check (Every 60s)
         if current_time - self.last_health_check > 60:
             self.watchdog.check_health()
             self.last_health_check = current_time
 
-        # 5. Dashboard Update (Every 30s)
+        # 7. Dashboard Update (Every 30s)
         if current_time - self.last_dashboard_update > 30:
             self.update_dashboard()
             self.last_dashboard_update = current_time
@@ -124,10 +135,10 @@ class Orchestrator:
             if plan_file:
                 self.logger.info(f"Plan created: {plan_file}")
 
-                # Move action to 'Done' to avoid reprocessing
-                # (OR move to 'processing' if we had that state)
+                # Move action to 'done' to avoid reprocessing
                 try:
                     vault.move_file(action_file, "done")
+                    self.recent_activity.append(f"Planned task: {action_file.name}")
                 except Exception as e:
                     self.logger.error(f"Failed to move action file {action_file.name}: {e}")
             else:
@@ -137,23 +148,67 @@ class Orchestrator:
         """Check for state changes in approvals."""
         # Check Approved/ folder for items ready to execute
         approved = vault.list_files("approved", "*.md")
+        approved.extend(vault.list_files("approved", "*.yaml"))
+        
         for app_file in approved:
             self.logger.info(f"Found approved item: {app_file.name}")
             self.approval_manager.process_approved(app_file)
             # Move to Done to stop processing
             vault.move_file(app_file, "done")
+            self.recent_activity.append(f"Executed approved: {app_file.name}")
 
         # Check Rejected/ folder for items to cancel
         rejected = vault.list_files("rejected", "*.md")
+        rejected.extend(vault.list_files("rejected", "*.yaml"))
+        
         for rej_file in rejected:
             self.logger.info(f"Found rejected item: {rej_file.name}")
             self.approval_manager.process_rejected(rej_file)
             # Move to Done
             vault.move_file(rej_file, "done")
+            self.recent_activity.append(f"Rejected task: {rej_file.name}")
+
+    def check_handovers(self):
+        """Check for cloud handover drafts (US1)."""
+        drafts = self.local_approval_handler.scan_pending_drafts()
+        if drafts:
+            self.logger.info(f"Found {len(drafts)} pending cloud drafts")
+            # In production, we might want to notify the user via a different channel
+            # For now, we just log it and they will see it in Dashboard/Obsidian
+            for draft in drafts:
+                # We don't auto-process here to maintain HITL
+                # The user will move them to Approved/ manually or via manage-approval skill
+                pass
 
     def check_active_plans(self):
-        """Monitor running plans."""
-        pass
+        """Monitor running plans and check for completion markers."""
+        # Check active plans in Plans/
+        plans = vault.list_files("plans", "*.md")
+        for plan_file in plans:
+            try:
+                content = vault.read_file(plan_file)
+                # If plan marked as TASK_COMPLETE, move to done
+                if "<promise>TASK_COMPLETE</promise>" in content or "status: \"completed\"" in content:
+                    self.logger.info(f"Plan {plan_file.name} completed, moving to done.")
+                    vault.move_file(plan_file, "done")
+                    self.recent_activity.append(f"Completed plan: {plan_file.name}")
+            except Exception as e:
+                self.logger.error(f"Error checking plan {plan_file.name}: {e}")
+
+    def sync_odoo(self):
+        """Perform daily Odoo accounting sync."""
+        self.logger.info("Starting scheduled Odoo accounting sync...")
+        try:
+            script_path = Path(".claude/skills/odoo-accounting/scripts/main_operation.py")
+            if script_path.exists():
+                import subprocess
+                subprocess.run(["python3", str(script_path), "--action", "sync"], check=True)
+                self.logger.info("Odoo sync completed successfully")
+                self.recent_activity.append("Synced Odoo accounting")
+            else:
+                self.logger.warning("Odoo sync script not found")
+        except Exception as e:
+            self.logger.error(f"Odoo sync failed: {e}")
 
     def update_dashboard(self):
         """Update the dashboard with current system status."""
