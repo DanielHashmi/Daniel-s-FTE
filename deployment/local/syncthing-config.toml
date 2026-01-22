@@ -1,0 +1,68 @@
+enableTempIndex = true
+enableIgnoredFolders = false
+enableNATTraversal = true
+enableLocalAnnounce = true
+enableLocalAnnounceHTTPS = false
+enableRemoteGlobalAnnounce = true
+enableGlobalAnnounce = true
+globalAnnounceServer = "https://discovery.syncthing.net/v2/?noannounce&id=LYXKCHX-VI3NYZR-ALCJBHF-WMZYSPK-QG6QJA3-MPFYMSO-U56GTUK-NA2MIAW"
+globalAnnounceServer = "https://discovery-v4.syncthing.net/v2/?nolookup&id=LYXKCHX-VI3NYZR-ALCJBHF-WMZYSPK-QG6QJA3-MPFYMSO-U56GTUK-NA2MIAW"
+globalAnnounceServer = "https://discovery-v6.syncthing.net/v2/?nolookup&id=LYXKCHX-VI3NYZR-ALCJBHF-WMZYSPK-QG6QJA3-MPFYMSO-U56GTUK-NA2MIAW"
+globalAnnounceLAN = true
+localAnnouncePort = 21027
+localAnnounceMCAddr = "[ff12::8384]:21027"
+relaysEnabled = true
+relaysDefault = true
+maxRecvKbps = 0
+maxSendKbps = 0
+upgrades = "automatic"
+upgradeToPreReleases = false
+cachedRebuilds = false
+keepTemporariesH = 24
+cacheIgnoredFiles = false
+progressUpdateIntervalS = 5
+expirePendingDevicesH = 24
+devicePingMinS = 60
+stunKeepaliveStartS = 200
+stunKeepaliveMinS = 200
+stunServer = "default"
+crashReportDelay = "2h0m0s"
+filesystemType = "basic"
+createGlobalOnly = false
+insecureAllowOldTLS = false
+reconnectionIntervalS = 60
+globalAnnounceRefreshIntervalM = 15
+
+[[device]]
+name = "cloud-agent"
+deviceID = "CLOUD_AGENT_DEVICE_ID_PLACEHOLDER"
+certName = ""
+addresses = ["tcp://CLOUD_AGENT_IP:22000"]
+compression = "true"
+
+[[device]]
+name = "local-agent"
+deviceID = "LOCAL_AGENT_DEVICE_ID_PLACEHOLDER"
+certName = ""
+addresses = ["dynamic"]
+compression = "true"
+
+[gui]
+enabled = true
+tls = false
+guiAuthenticationUser = "admin"
+guiAuthenticationPassword = "PLACEHOLDER_PASSWORD"
+address = "0.0.0.0:8384"
+apikey = "PLACEHOLDER_API_KEY"
+
+[options]
+listenAddress = ["0.0.0.0:22000"]
+globalAnnounceServer = "https://discovery.syncthing.net/v2/?noannounce&id=LYXKCHX-VI3NYZR-ALCJBHF-WMZYSPK-QG6QJA3-MPFYMSO-U56GTUK-NA2MIAW"
+globalAnnounceServer = "https://discovery-v4.syncthing.net/v2/?nolookup&id=LYXKCHX-VI3NYZR-ALCJBHF-WMZYSPK-QG6QJA3-MPFYMSO-U56GTUK-NA2MIAW"
+globalAnnounceServer = "https://discovery-v6.syncthing.net/v2/?nolookup&id=LYXKCHX-VI3NYZR-ALCJBHF-WMZYSPK-QG6QJA3-MPFYMSO-U56GTUK-NA2MIAW"
+startBrowser = false
+
+[ldap]
+enabled = false
+address = "localhost:389"
+tls = false

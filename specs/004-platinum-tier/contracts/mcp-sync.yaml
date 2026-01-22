@@ -1,0 +1,42 @@
+openapi: 3.0.0
+info:
+  title: Vault Sync MCP Endpoints
+  version: 1.0.0
+
+paths:
+  /claim-task:
+    post:
+      summary: Claim task ownership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                task_id:
+                  type: string
+      responses:
+        '200':
+          description: Task claimed
+
+  /get-status:
+    get:
+      summary: Get agent status
+      responses:
+        '200':
+          description: Status object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudStatus'
+
+components:
+  schemas:
+    CloudStatus:
+      type: object
+      properties:
+        uptime:
+          type: number
+        sync_lag:
+          type: integer

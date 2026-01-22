@@ -1,12 +1,19 @@
-# Bronze Tier Agent Skills Catalog
+# Silver Tier Agent Skills Catalog
 
-**Version**: 1.0.0
-**Date**: 2026-01-14
-**Category**: Personal AI Employee - Bronze Tier Foundation
+**Version**: 2.0.0
+**Date**: 2026-01-15
+**Category**: Personal AI Employee - Silver Tier Functional Assistant
 
 ## Overview
 
-This directory contains Claude Code Agent Skills for the Bronze Tier Personal AI Employee system. These skills provide reusable, documented capabilities for managing your AI Employee's vault, watchers, and processing workflows.
+This directory contains Claude Code Agent Skills for the Silver Tier Personal AI Employee system. These skills provide reusable, documented capabilities for managing your AI Employee's vault, orchestrator, MCP servers, approval workflows, and automated operations.
+
+**Production Status**: ✅ All services running with PM2 process management
+
+**Architecture**:
+- **ai-orchestrator**: Main coordinator with threaded watchers (Gmail, WhatsApp, LinkedIn)
+- **mcp-email**: Email sending capabilities via FastMCP
+- **mcp-social**: LinkedIn posting capabilities via FastMCP
 
 ## Available Skills
 
@@ -34,29 +41,28 @@ User: "Run the setup-vault skill"
 ---
 
 ### 2. watcher-manager
-**Purpose**: Start, stop, and manage watcher processes
-**Status**: ✅ Ready
-**File**: `watcher-manager.md`
+**Purpose**: Manage orchestrator and watchers
+**Status**: ✅ Ready (Silver Tier)
+**File**: `watcher-manager/SKILL.md`
 
-Manages the lifecycle of watcher processes (File System or Gmail) using PM2.
+Manages the ai-orchestrator process which runs all watchers (Gmail, WhatsApp, LinkedIn) as internal threads.
 
 **Usage**:
 ```
-User: "Run watcher-manager with action=start"
-User: "Run watcher-manager with action=stop"
-User: "Run watcher-manager with action=status"
-User: "Run watcher-manager with action=restart"
+User: "Check watcher status"
+User: "Restart the orchestrator"
+User: "Start the watchers"
 ```
 
-**Inputs**:
-- `action` (required): "start", "stop", "restart", or "status"
-- `watcher_type` (optional): "filesystem" or "gmail"
-- `vault_path` (optional): Custom vault location
+**Key Commands**:
+- `pm2 status` - Check orchestrator status
+- `pm2 restart ai-orchestrator` - Restart orchestrator and all watchers
+- `pm2 logs ai-orchestrator` - View orchestrator logs
 
 **Outputs**:
-- Starts/stops watcher process with PM2
-- Updates Dashboard.md with watcher status
-- Shows process ID and uptime
+- Shows orchestrator process status
+- Displays watcher health in Dashboard.md
+- Shows uptime and resource usage
 
 ---
 
@@ -116,63 +122,256 @@ User: "Run view-dashboard with format=status"
 
 ---
 
+### 5. manage-approval
+**Purpose**: Manage human-in-the-loop approval workflow
+**Status**: ✅ Ready (Silver Tier)
+**File**: `manage-approval/SKILL.md`
+
+Manages approval requests for sensitive actions (emails, social posts, payments).
+
+**Usage**:
+```
+User: "Check pending approvals"
+User: "Approve action AR-2026-01-15-001"
+User: "Reject email request"
+```
+
+**Inputs**:
+- `action` (required): "list", "approve", or "reject"
+- `id` (optional): Approval request ID
+- `reason` (optional): Rejection reason
+
+**Outputs**:
+- Lists pending approval requests
+- Moves approved files to Approved/
+- Moves rejected files to Rejected/
+- Logs approval decisions to audit trail
+
+---
+
+### 6. email-ops
+**Purpose**: Send emails via MCP email server
+**Status**: ✅ Ready (Silver Tier)
+**File**: `email-ops/SKILL.md`
+
+Sends emails through the mcp-email MCP server with approval workflow.
+
+**Usage**:
+```
+User: "Send email to client@example.com"
+User: "Check sent emails"
+User: "Check email server status"
+```
+
+**Inputs**:
+- `action` (required): "send", "list-sent", or "status"
+- `to` (optional): Recipient email
+- `subject` (optional): Email subject
+- `body` (optional): Email body
+- `attachment` (optional): File path to attach
+
+**Outputs**:
+- Creates approval request for email
+- Sends email after approval
+- Logs to audit trail
+- Returns sent email status
+
+---
+
+### 7. social-ops
+**Purpose**: Post to LinkedIn via MCP social server
+**Status**: ✅ Ready (Silver Tier)
+**File**: `social-ops/SKILL.md`
+
+Posts content to LinkedIn through the mcp-social MCP server with approval workflow.
+
+**Usage**:
+```
+User: "Post to LinkedIn"
+User: "Schedule LinkedIn post"
+User: "Check social server status"
+```
+
+**Inputs**:
+- `action` (required): "post", "schedule", or "status"
+- `content` (optional): Post content
+- `schedule` (optional): Schedule time (ISO 8601)
+
+**Outputs**:
+- Creates approval request for post
+- Publishes post after approval
+- Logs to audit trail
+- Returns post status
+
+---
+
+### 8. scheduler
+**Purpose**: Manage scheduled tasks using cron
+**Status**: ✅ Ready (Silver Tier)
+**File**: `scheduler/SKILL.md`
+
+Manages scheduled tasks for recurring operations (daily briefings, cleanup, etc.).
+
+**Usage**:
+```
+User: "List scheduled tasks"
+User: "Schedule daily briefing at 8am"
+User: "Remove scheduled task"
+```
+
+**Inputs**:
+- `action` (required): "list", "add", or "remove"
+- `cmd` (optional): Command to schedule
+- `schedule` (optional): Cron expression
+- `comment` (optional): Task name/description
+
+**Outputs**:
+- Lists current scheduled tasks
+- Adds task to crontab
+- Removes task from crontab
+- Validates cron syntax
+
+---
+
+### 9. create-claude-skill
+**Purpose**: Create new AI skills using MCP Code Execution pattern
+**Status**: ✅ Ready (Silver Tier)
+**File**: `create-claude-skill/SKILL.md`
+
+Creates new reusable skills for the AI Employee system.
+
+**Usage**:
+```
+User: "Create a new skill for data analysis"
+User: "Create skill for report generation"
+```
+
+**Inputs**:
+- `skill_name` (required): Name of new skill
+- `description` (required): What the skill does
+- `capabilities` (optional): List of capabilities
+
+**Outputs**:
+- Creates skill directory structure
+- Generates SKILL.md and REFERENCE.md
+- Creates script templates
+- Adds skill to catalog
+
+---
+
 ## Quick Start Workflow
 
 ### Initial Setup (First Time)
 
-1. **Create Vault Structure**
+1. **Verify System is Running**
+   ```bash
+   pm2 status
    ```
-   User: "Run the setup-vault skill"
-   ```
+   All three services (ai-orchestrator, mcp-email, mcp-social) should show "online".
 
-2. **Open Vault in Obsidian**
-   - Launch Obsidian
-   - Open folder as vault → Select `AI_Employee_Vault`
+2. **Check Dashboard**
+   ```
+   User: "Show me the dashboard"
+   ```
 
 3. **Customize Company Handbook**
    - Edit `AI_Employee_Vault/Company_Handbook.md`
    - Add your rules, priorities, and preferences
 
-4. **Start Watcher**
-   ```
-   User: "Run watcher-manager with action=start"
-   ```
+4. **Configure Optional Watchers**
+   - Gmail: See PRODUCTION_GUIDE.md for OAuth setup
+   - WhatsApp: See PRODUCTION_GUIDE.md for QR code setup
 
-5. **Verify System**
-   ```
-   User: "Run view-dashboard skill"
+5. **Test the System**
+   ```bash
+   # Create test action file
+   cat > AI_Employee_Vault/Needs_Action/test.md << 'EOF'
+   ---
+   id: "test_001"
+   type: "email"
+   source: "manual"
+   priority: "high"
+   timestamp: "2026-01-15T12:00:00Z"
+   status: "pending"
+   ---
+
+   # Test Task
+
+   Send test email to test@example.com
+   EOF
+
+   # Wait 10 seconds for processing
+   sleep 10
+
+   # Check results
+   ls AI_Employee_Vault/Plans/
+   ls AI_Employee_Vault/Pending_Approval/
    ```
 
 ### Daily Usage
 
 **Morning Check-In**:
-```
-User: "Show me the dashboard"
-Claude: [Runs view-dashboard]
+```bash
+# Check system status
+pm2 status
 
-User: "Process any pending actions"
-Claude: [Runs process-inbox]
-```
+# View dashboard
+cat AI_Employee_Vault/Dashboard.md
 
-**Add Manual Task**:
-```
-User: "Create a task to review quarterly report"
-Claude: [Creates action file in Needs_Action]
-
-User: "Process inbox"
-Claude: [Runs process-inbox, creates plan]
+# Check pending approvals
+ls AI_Employee_Vault/Pending_Approval/
 ```
 
-**Check Status**:
-```
-User: "Is the watcher running?"
-Claude: [Runs watcher-manager with action=status]
+**Give AI a Task**:
+```bash
+# Create action file
+cat > AI_Employee_Vault/Needs_Action/my_task.md << 'EOF'
+---
+id: "task_$(date +%s)"
+type: "email"
+source: "manual"
+priority: "high"
+timestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+status: "pending"
+---
+
+# Your Task Here
+
+Describe what you want the AI to do.
+EOF
+
+# Wait for processing (10 seconds)
+sleep 10
+
+# Check for approval request
+ls AI_Employee_Vault/Pending_Approval/
 ```
 
-**Review Plans**:
+**Approve Actions**:
+```bash
+# Check pending approvals
+ls AI_Employee_Vault/Pending_Approval/
+
+# Read approval request
+cat AI_Employee_Vault/Pending_Approval/[filename].md
+
+# Approve
+mv AI_Employee_Vault/Pending_Approval/[filename].md AI_Employee_Vault/Approved/
+
+# Or reject
+mv AI_Employee_Vault/Pending_Approval/[filename].md AI_Employee_Vault/Rejected/
 ```
-User: "Show me the plans created today"
-Claude: [Lists files in AI_Employee_Vault/Plans/]
+
+**Monitor System**:
+```bash
+# Check PM2 status
+pm2 status
+
+# View orchestrator logs
+pm2 logs ai-orchestrator --lines 50
+
+# View audit logs
+cat AI_Employee_Vault/Logs/$(date +%Y-%m-%d).json | python3 -m json.tool
 ```
 
 ### Troubleshooting

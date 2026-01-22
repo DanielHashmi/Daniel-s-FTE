@@ -73,3 +73,71 @@ src/
 |-----------|------------|-------------------------------------|
 | Multiple Processes (PM2) | Concurrent monitoring of 3 channels | Single loop blocks on one channel's latency/failure |
 | Explicit MCP Servers | Constitution specific requirement (FR-027) | Direct function calls reduce compatibility with future tiers |
+| Claude Code CLI invocation | Hackathon requirement: "Claude Code acts as reasoning engine" | Template logic lacks intelligence and context awareness |
+
+## Claude Code Integration Architecture
+
+**The Brain (Hackathon Requirement)**
+
+Per the hackathon guide: *"The Brain: Claude Code acts as the reasoning engine... It uses its File System tools to read your tasks and write reports."*
+
+### Integration Pattern
+
+```text
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Needs_Action/  │────▶│ claude_invoker.py│────▶│    Plans/       │
+│  action_file.md │     │  (shells out to  │     │  plan_file.md   │
+└─────────────────┘     │   claude CLI)    │     └─────────────────┘
+                        └──────────────────┘
+                               │
+                               ▼
+                        ┌──────────────────┐
+                        │  Context Files   │
+                        │ - Company_Handbook│
+                        │ - Business_Goals │
+                        └──────────────────┘
+```
+
+### Implementation Approach
+
+**Option 1: Direct CLI Invocation (Recommended for Silver Tier)**
+```python
+# claude_invoker.py
+import subprocess
+
+def invoke_claude_for_planning(action_content: str, context: str) -> str:
+    prompt = f"""You are processing an action file for an AI Employee system.
+
+Context from Company Handbook:
+{context}
+
+Action to process:
+{action_content}
+
+Create a Plan.md with:
+1. Objective (what needs to be done)
+2. Steps (with checkboxes)
+3. Approval requirements (flag sensitive actions)
+4. Risk assessment
+
+Output ONLY the markdown content for the plan file."""
+
+    result = subprocess.run(
+        ['claude', '-p', prompt],
+        capture_output=True,
+        text=True,
+        timeout=120
+    )
+    return result.stdout
+```
+
+**Option 2: Ralph Wiggum Loop (Gold Tier)**
+For persistent multi-step tasks, the stop hook pattern keeps Claude iterating until task completion.
+
+### Fallback Strategy
+
+If Claude Code CLI is unavailable:
+1. Check if `claude` command exists in PATH
+2. If not, fall back to template-based plan generation
+3. Log warning that intelligent reasoning is disabled
+4. Continue with basic functionality

@@ -13,10 +13,10 @@ description: "Task list for Silver Tier implementation"
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create project structure (`src/`, `tests/`, `src/watchers`, `src/mcp`, `src/orchestration`, `src/lib`) per plan.md
-- [ ] T002 Initialize `pyproject.toml` with `playwright`, `mcp`, `google-api-python-client` dependencies
-- [ ] T003 Generate `ecosystem.config.js` for PM2 management of watchers and orchestrator
-- [ ] T004 Install Playwright browsers (`playwright install chromium`) for WhatsApp watcher
+- [X] T001 Create project structure (`src/`, `tests/`, `src/watchers`, `src/mcp`, `src/orchestration`, `src/lib`) per plan.md
+- [X] T002 Initialize `pyproject.toml` with `playwright`, `mcp`, `google-api-python-client` dependencies
+- [X] T003 Generate `ecosystem.config.js` for PM2 management of watchers and orchestrator
+- [X] T004 Install Playwright browsers (`playwright install chromium`) for WhatsApp watcher
 
 ---
 
@@ -26,11 +26,11 @@ description: "Task list for Silver Tier implementation"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Create `src/lib/vault.py` for standard vault path management and file operations
-- [ ] T006 Create `src/lib/logging.py` for structured JSON audit logging
-- [ ] T007 Define `BaseWatcher` abstract class in `src/watchers/base.py` per contracts/interfaces.md
-- [ ] T008 [P] Implement `src/orchestration/orchestrator.py` skeleton (main loop scaffolding)
-- [ ] T009 [P] Create `tests/fixtures/` with sample Action Files and Plans
+- [X] T005 Create `src/lib/vault.py` for standard vault path management and file operations
+- [X] T006 Create `src/lib/logging.py` for structured JSON audit logging
+- [X] T007 Define `BaseWatcher` abstract class in `src/watchers/base.py` per contracts/interfaces.md
+- [X] T008 [P] Implement `src/orchestration/orchestrator.py` skeleton (main loop scaffolding)
+- [X] T009 [P] Create `tests/fixtures/` with sample Action Files and Plans
 
 **Checkpoint**: Foundation ready - watcher and logic implementation can now begin
 
@@ -44,11 +44,11 @@ description: "Task list for Silver Tier implementation"
 
 ### Implementation for User Story 1
 
-- [ ] T010 [P] [US1] Implement `GmailWatcher` in `src/watchers/gmail.py` using `google-api-python-client`
-- [ ] T011 [P] [US1] Implement `WhatsAppWatcher` in `src/watchers/whatsapp.py` using `playwright`
-- [ ] T012 [P] [US1] Implement `LinkedInWatcher` in `src/watchers/linkedin.py`
-- [ ] T013 [US1] Update `src/orchestration/orchestrator.py` to register and run these watchers
-- [ ] T014 [US1] Implement integration test `tests/integration/test_watchers.py` (mocking external APIs)
+- [X] T010 [P] [US1] Implement `GmailWatcher` in `src/watchers/gmail.py` using `google-api-python-client`
+- [X] T011 [P] [US1] Implement `WhatsAppWatcher` in `src/watchers/whatsapp.py` using `playwright`
+- [X] T012 [P] [US1] Implement `LinkedInWatcher` in `src/watchers/linkedin.py`
+- [X] T013 [US1] Update `src/orchestration/orchestrator.py` to register and run these watchers
+- [X] T014 [US1] Implement integration test `tests/integration/test_watchers.py` (mocking external APIs)
 
 **Checkpoint**: Watchers are running and detecting inputs.
 
@@ -62,10 +62,10 @@ description: "Task list for Silver Tier implementation"
 
 ### Implementation for User Story 2
 
-- [ ] T015 [P] [US2] Implement `src/orchestration/plan_manager.py` logic for plan creation
-- [ ] T016 [US2] Update `orchestrator.py` to trigger `/process-inbox` or internal logic when `Needs_Action` is populated
-- [ ] T017 [US2] Integrate `plan_manager.py` with `lib/vault.py` for reading/writing plan files
-- [ ] T018 [US2] Add logic to identify "approval required" steps based on sensitive keywords
+- [X] T015 [P] [US2] Implement `src/orchestration/plan_manager.py` logic for plan creation
+- [X] T016 [US2] Update `orchestrator.py` to trigger `/process-inbox` or internal logic when `Needs_Action` is populated
+- [X] T017 [US2] Integrate `plan_manager.py` with `lib/vault.py` for reading/writing plan files
+- [X] T018 [US2] Add logic to identify "approval required" steps based on sensitive keywords
 
 **Checkpoint**: Input -> Action File -> Plan File flow is working.
 
@@ -79,10 +79,10 @@ description: "Task list for Silver Tier implementation"
 
 ### Implementation for User Story 3
 
-- [ ] T019 [P] [US3] Implement `ApprovalManager` in `src/orchestration/approval_manager.py`
-- [ ] T020 [US3] Connect `orchestrator.py` to monitor `Pending_Approval` folder state changes
-- [ ] T021 [US3] Ensure `manage-approval` skill works correctly with the generated approval files
-- [ ] T022 [US3] Add audit logging for approval/rejection events in `src/lib/logging.py`
+- [X] T019 [P] [US3] Implement `ApprovalManager` in `src/orchestration/approval_manager.py`
+- [X] T020 [US3] Connect `orchestrator.py` to monitor `Pending_Approval` folder state changes
+- [X] T021 [US3] Ensure `manage-approval` skill works correctly with the generated approval files
+- [X] T022 [US3] Add audit logging for approval/rejection events in `src/lib/logging.py`
 
 **Checkpoint**: Core safety loop (Plan -> Approval -> Execution) is complete.
 
@@ -96,10 +96,10 @@ description: "Task list for Silver Tier implementation"
 
 ### Implementation for User Story 4
 
-- [ ] T023 [P] [US4] Implement `EmailServer` in `src/mcp/email_server.py` using `mcp` library
-- [ ] T024 [US4] Update `email-ops` skill to optionally connect to this MCP server or use shared logic
-- [ ] T025 [US4] Add support for handling attachments in `email_server.py`
-- [ ] T026 [US4] Register email server in PM2 config
+- [X] T023 [P] [US4] Implement `EmailServer` in `src/mcp/email_server.py` using `mcp` library
+- [X] T024 [US4] Update `email-ops` skill to optionally connect to this MCP server or use shared logic
+- [X] T025 [US4] Add support for handling attachments in `email_server.py`
+- [X] T026 [US4] Register email server in PM2 config
 
 **Checkpoint**: Email capability active.
 
@@ -113,9 +113,9 @@ description: "Task list for Silver Tier implementation"
 
 ### Implementation for User Story 5
 
-- [ ] T027 [P] [US5] Implement `SocialServer` in `src/mcp/social_server.py`
-- [ ] T028 [US5] Implement duplicate content detection logic in `social_server.py`
-- [ ] T029 [US5] Register social server in PM2 config
+- [X] T027 [P] [US5] Implement `SocialServer` in `src/mcp/social_server.py`
+- [X] T028 [US5] Implement duplicate content detection logic in `social_server.py`
+- [X] T029 [US5] Register social server in PM2 config
 
 **Checkpoint**: Social capability active.
 
@@ -129,10 +129,10 @@ description: "Task list for Silver Tier implementation"
 
 ### Implementation for User Stories 6 & 7
 
-- [ ] T030 [P] [US6] Integrate `scheduler` skill with `orchestrator.py` (read `Config/schedules.json`)
-- [ ] T031 [P] [US7] Implement `Watchdog` class in `src/orchestration/watchdog.py`
-- [ ] T032 [US7] Add health check loop to `orchestrator.py` (checking PM2 status)
-- [ ] T033 [US7] Add dashboard status update logic to `orchestrator.py`
+- [X] T030 [P] [US6] Integrate `scheduler` skill with `orchestrator.py` (read `Config/schedules.json`)
+- [X] T031 [P] [US7] Implement `Watchdog` class in `src/orchestration/watchdog.py`
+- [X] T032 [US7] Add health check loop to `orchestrator.py` (checking PM2 status)
+- [X] T033 [US7] Add dashboard status update logic to `orchestrator.py`
 
 **Checkpoint**: System is robust and automated.
 
@@ -142,10 +142,50 @@ description: "Task list for Silver Tier implementation"
 
 **Purpose**: Security, documentation, and cleanup
 
-- [ ] T034 Update `quickstart.md` with verified steps
-- [ ] T035 Ensure all sensitive actions have Audit Log coverage
-- [ ] T036 Refactor any shared credentials loading to `lib/config.py`
-- [ ] T037 Final integration test of full flow: Email In -> Plan -> Approval -> Email Out
+- [X] T034 Update `quickstart.md` with verified steps
+- [X] T035 Ensure all sensitive actions have Audit Log coverage
+- [X] T036 Refactor any shared credentials loading to `lib/config.py`
+- [X] T037 Final integration test of full flow: Email In -> Plan -> Approval -> Email Out
+
+---
+
+## Phase 10: Claude Code Reasoning Loop Integration (P1) 🧠 CRITICAL
+
+**Purpose**: Replace template-based plan generation with actual Claude Code reasoning
+
+**Why Critical**: Per hackathon requirements, "Claude Code acts as the reasoning engine... It uses its File System tools to read your tasks and write reports." The current implementation uses hardcoded templates instead of Claude reasoning.
+
+**Independent Test**: Drop an action file in `Needs_Action/`, verify Claude Code is invoked, and confirm it generates an intelligent, context-aware Plan.md (not a template).
+
+### Implementation for Claude Code Integration
+
+- [X] T038 [US2] Create `src/orchestration/claude_invoker.py` module to shell out to `claude` CLI
+- [X] T039 [US2] Implement `invoke_claude_for_planning()` function that:
+  - Reads action file content
+  - Constructs prompt with context (Company_Handbook.md, Business_Goals.md)
+  - Calls `claude --print` or `claude -p` with the prompt
+  - Captures output and writes to Plans/ folder
+- [X] T040 [US2] Update `plan_manager.py` to use `claude_invoker.py` instead of template logic
+- [X] T041 [US2] Add fallback to template logic if Claude Code is unavailable (graceful degradation)
+- [ ] T042 [US2] Create `process-inbox` skill enhancement to trigger Claude reasoning loop
+- [X] T043 [US2] Implement rate limiting/cooldown to prevent excessive Claude invocations
+- [ ] T044 [US2] Add configuration for Claude model selection (claude-3.5-sonnet, etc.)
+
+**Checkpoint**: Claude Code is actively reasoning about action files, not using templates.
+
+---
+
+## Phase 11: Ralph Wiggum Loop (Gold Tier Prep - Optional)
+
+**Purpose**: Enable autonomous multi-step task completion
+
+**Note**: This is Gold Tier functionality but foundation can be laid in Silver Tier.
+
+- [ ] T045 [US2] Research and document Ralph Wiggum stop hook pattern
+- [ ] T046 [US2] Create `src/orchestration/ralph_loop.py` for persistent task execution
+- [ ] T047 [US2] Implement completion detection (promise-based or file-movement-based)
+
+**Checkpoint**: Foundation ready for Gold Tier autonomous completion.
 
 ---
 

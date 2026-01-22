@@ -1,370 +1,441 @@
 # AI Employee - Silver Tier Functional Assistant
 
 **Version**: 0.2.0
-**Status**: Silver Tier (Functional Assistant)
+**Status**: ✅ Production Ready
 **Branch**: `002-silver-tier`
 
 ## Overview
 
-The Personal AI Employee system Is a local-first, autonomous assistant that monitors multiple input sources (Gmail, WhatsApp, LinkedIn), creates structured plans, and executes approved actions via Agent Skills. This Silver Tier implementation transforms the foundation into a functional assistant capable of real-world interactions under human supervision.
+The Personal AI Employee system is a local-first, autonomous assistant that monitors multiple input sources (Gmail, WhatsApp, LinkedIn), creates structured plans, and executes approved actions via MCP servers. This Silver Tier implementation is a fully functional assistant capable of real-world interactions under human supervision.
 
 ### Key Features
 
-- **Local-First Architecture**: All data stays on your machine in an Obsidian vault
+- **Local-First Architecture**: All data stays on your machine in the AI Employee Vault
 - **Multi-Channel Monitoring**: Monitors Gmail, WhatsApp, and LinkedIn for new work
-- **Intelligent Planning**: Claude autonomously creates execution plans for incoming tasks
-- **HITL Approval Workflow**: Sensitive actions require explicit human approval via file system
+- **Intelligent Planning**: Autonomously creates execution plans for incoming tasks
+- **HITL Approval Workflow**: Sensitive actions require explicit human approval
 - **MCP Integrations**: Modular servers for Email sending and LinkedIn posting
 - **Agent Skills**: Reusable capabilities for all AI operations
 - **Audit Logging**: Comprehensive JSON logs for all system activities
+- **Production Ready**: PM2-managed processes with auto-restart and monitoring
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Python 3.13+** ([download](https://www.python.org/downloads/))
-- **Obsidian 1.11.4+** ([download](https://obsidian.md/download))
-- **Claude Code** ([setup guide](https://claude.com/product/claude-code))
-- **Node.js 24+** (for PM2 process manager)
+- **Python 3.12+** ([download](https://www.python.org/downloads/))
+- **Node.js 18+** (for PM2 process manager)
 - **Git** (for version control)
+- **Linux/WSL2** (recommended for production)
 
-### Installation
-
-1. **Clone or navigate to the project**:
-   ```bash
-   cd "/path/to/Daniel's FTE"
-   ```
-
-2. **Create and activate virtual environment**:
-   ```bash
-   python3 -m venv venv
-
-   # On macOS/Linux:
-   source venv/bin/activate
-
-   # On Windows:
-   venv\Scripts\activate
-   ```
-
-3. **Install dependencies**:
-   ```bash
-   pip install --upgrade pip
-   pip install -e .
-
-   # For development (includes testing tools):
-   pip install -e ".[dev]"
-   ```
-
-4. **Configure environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your settings
-   ```
-
-5. **Initialize the vault** (if not already done):
-   ```bash
-   python .claude/skills/setup-vault/scripts/main_operation.py
-   ```
-
-6. **Open vault in Obsidian**:
-   - Launch Obsidian
-   - Click "Open folder as vault"
-   - Navigate to `AI_Employee_Vault`
-   - Pin `Dashboard.md` for quick access
-
-### Running the Watcher
-
-#### Option A: File System Watcher (Recommended for beginners)
+### 5-Minute Setup
 
 ```bash
-# Start with PM2 (production)
-pm2 start ecosystem.config.js --only ai-watcher-filesystem
+# 1. Navigate to project
+cd "/mnt/c/Users/kk/Desktop/Daniel's FTE"
 
-# OR run manually (development)
-python src/watchers/filesystem_watcher.py
+# 2. Install PM2
+npm install -g pm2
+
+# 3. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 4. Install dependencies
+pip install watchdog google-auth google-auth-oauthlib google-api-python-client pyyaml python-dotenv playwright fastmcp mcp
+
+# 5. Install Playwright browsers
+playwright install chromium
+
+# 6. Create environment file
+cp .env.example .env
+
+# 7. Start the system
+pm2 start ecosystem.config.js
+
+# 8. Verify it's running
+pm2 status
 ```
 
-Drop files into `AI_Employee_Vault/Inbox/` and the watcher will detect them automatically.
+**Expected:** All three services (ai-orchestrator, mcp-email, mcp-social) should show "online".
 
-#### Option B: Gmail Watcher (Advanced)
+### First Task
 
-1. **Set up Google Cloud credentials**:
-   - Create project in [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable Gmail API
-   - Create OAuth2 credentials (Desktop app)
-   - Download `credentials.json` to project root
-
-2. **Update `.env`**:
-   ```bash
-   WATCHER_TYPE=gmail
-   GMAIL_CREDENTIALS_PATH=credentials.json
-   GMAIL_TOKEN_PATH=token.json
-   ```
-
-3. **Authenticate** (first time only):
-   ```bash
-   python src/watchers/gmail_watcher.py
-   # Browser will open for OAuth consent
-   ```
-
-4. **Start watcher**:
-   ```bash
-   pm2 start ecosystem.config.js --only ai-watcher-gmail
-   ```
-
-### Processing Action Files
-
-Once action files are created in `Needs_Action/`, use Claude Code to process them:
+Create your first task to verify the system works:
 
 ```bash
-cd AI_Employee_Vault
-claude
+cat > AI_Employee_Vault/Needs_Action/test_task.md << 'EOF'
+---
+id: "test_001"
+type: "email"
+source: "manual"
+priority: "high"
+timestamp: "2026-01-15T12:00:00Z"
+status: "pending"
+---
 
-# In Claude, say:
-# "Process all files in Needs_Action and create plans"
+# Test Task
+
+Send a test email to test@example.com with subject "System Test".
+EOF
+
+# Wait 10 seconds
+sleep 10
+
+# Check if plan was created
+ls AI_Employee_Vault/Plans/
+
+# Check if approval request was created
+ls AI_Employee_Vault/Pending_Approval/
 ```
 
-Claude will:
-1. Read action files
-2. Read `Company_Handbook.md` for behavior rules
-3. Create plan files in `Plans/`
-4. Move processed files to `Done/`
-5. Update `Dashboard.md`
+**Expected:** You should see new files in both directories.
+
+## Documentation
+
+### Getting Started
+
+- **[Quickstart Guide](specs/002-silver-tier/quickstart.md)** - Production deployment guide with installation, configuration, and troubleshooting
+- **[Testing Guide](specs/002-silver-tier/testing.md)** - Comprehensive testing scenarios from basic to production
+
+### Technical Documentation
+
+- **[Feature Specifications](specs/002-silver-tier/spec.md)** - User stories and acceptance criteria
+- **[Architecture & Decisions](specs/002-silver-tier/research.md)** - Design rationale and production lessons learned
+- **[Implementation Plan](specs/002-silver-tier/plan.md)** - Architecture overview and component design
+- **[Data Models](specs/002-silver-tier/data-model.md)** - File formats and structures
+- **[API Contracts](specs/002-silver-tier/contracts/interfaces.md)** - Interface definitions
+
+### Additional Reference
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed component implementation reference
+
+## System Architecture
+
+### Components
+
+```
+PM2 Process Manager
+├── ai-orchestrator          # Main coordinator
+│   ├── GmailWatcher         # Monitors Gmail
+│   ├── WhatsAppWatcher      # Monitors WhatsApp
+│   ├── LinkedInWatcher      # Monitors LinkedIn
+│   ├── PlanManager          # Generates plans
+│   ├── ApprovalManager      # HITL workflow
+│   └── DashboardManager     # Updates status
+├── mcp-email                # Email sending via MCP
+└── mcp-social               # LinkedIn posting via MCP
+```
+
+### Workflow
+
+1. **Input Detection**: Watchers monitor channels (Gmail, WhatsApp, LinkedIn)
+2. **Action Creation**: New items create action files in `Needs_Action/`
+3. **Plan Generation**: Orchestrator creates execution plan in `Plans/`
+4. **Approval Request**: Sensitive actions create approval request in `Pending_Approval/`
+5. **Human Decision**: You move file to `Approved/` or `Rejected/`
+6. **Execution**: Orchestrator executes via MCP server
+7. **Completion**: File moved to `Done/`, logged to audit trail
+
+## Daily Usage
+
+### Give AI a Task
+
+```bash
+cat > AI_Employee_Vault/Needs_Action/my_task.md << 'EOF'
+---
+id: "task_$(date +%s)"
+type: "email"
+source: "manual"
+priority: "high"
+timestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+status: "pending"
+---
+
+# Your Task Here
+
+Describe what you want the AI to do.
+EOF
+```
+
+### Approve Actions
+
+```bash
+# Check pending approvals
+ls AI_Employee_Vault/Pending_Approval/
+
+# Read the request
+cat AI_Employee_Vault/Pending_Approval/[filename].md
+
+# Approve
+mv AI_Employee_Vault/Pending_Approval/[filename].md AI_Employee_Vault/Approved/
+
+# Or reject
+mv AI_Employee_Vault/Pending_Approval/[filename].md AI_Employee_Vault/Rejected/
+```
+
+### Monitor System
+
+```bash
+# Check status
+pm2 status
+
+# View logs
+pm2 logs
+
+# View dashboard
+cat AI_Employee_Vault/Dashboard.md
+
+# View today's audit log
+cat AI_Employee_Vault/Logs/$(date +%Y-%m-%d).json | python3 -m json.tool
+```
+
+## Configuration
+
+### Environment Variables (`.env`)
+
+```bash
+# System Mode
+DRY_RUN=false                          # Set to true for testing
+
+# Watcher Intervals (seconds)
+GMAIL_INTERVAL=60                      # Gmail check frequency
+WHATSAPP_INTERVAL=60                   # WhatsApp check frequency
+LINKEDIN_INTERVAL=300                  # LinkedIn check frequency
+
+# Orchestrator Settings
+ORCHESTRATOR_POLL_INTERVAL=5           # Action file polling
+HEALTH_CHECK_INTERVAL=60               # Health check frequency
+DASHBOARD_UPDATE_INTERVAL=30           # Dashboard update frequency
+
+# Approval Requirements
+REQUIRE_EMAIL_APPROVAL=true            # Force email approval
+REQUIRE_SOCIAL_APPROVAL=true           # Force social approval
+```
+
+### Optional: Gmail Monitoring
+
+To enable Gmail monitoring:
+
+1. Create project in [Google Cloud Console](https://console.cloud.google.com/)
+2. Enable Gmail API
+3. Create OAuth2 credentials (Desktop app)
+4. Download `credentials.json` to project root
+5. Run authentication:
+
+```bash
+cd "/mnt/c/Users/kk/Desktop/Daniel's FTE"
+source venv/bin/activate
+python3 -c "
+from src.watchers.gmail import GmailWatcher
+w = GmailWatcher()
+w._authenticate()
+"
+```
+
+6. Restart orchestrator: `pm2 restart ai-orchestrator`
+
+### Optional: WhatsApp Monitoring
+
+To enable WhatsApp monitoring:
+
+1. Install system dependency: `sudo apt-get install libnspr4`
+2. Scan QR code (see [PRODUCTION_GUIDE.md](PRODUCTION_GUIDE.md))
+3. Restart orchestrator: `pm2 restart ai-orchestrator`
+
+## Common Commands
+
+```bash
+# Start system
+pm2 start ecosystem.config.js
+
+# Stop system
+pm2 stop all
+
+# Restart system
+pm2 restart all
+
+# View logs
+pm2 logs
+
+# Check status
+pm2 status
+
+# Save configuration
+pm2 save
+
+# Configure auto-start on boot
+pm2 startup
+```
+
+## Troubleshooting
+
+### Services crash or restart repeatedly
+
+```bash
+# Check error logs
+pm2 logs --err --lines 50
+
+# Common fixes:
+# 1. Reinstall dependencies
+source venv/bin/activate
+pip install --force-reinstall watchdog google-auth-oauthlib google-api-python-client pyyaml python-dotenv playwright fastmcp mcp
+
+# 2. Restart fresh
+pm2 delete all
+pm2 start ecosystem.config.js
+```
+
+### "ModuleNotFoundError" errors
+
+The wrapper scripts should handle this automatically. If you still see errors, see [SETUP_TROUBLESHOOTING.md](SETUP_TROUBLESHOOTING.md).
+
+### Services online but not processing
+
+```bash
+# Check orchestrator logs
+pm2 logs ai-orchestrator --lines 50
+
+# Create test action file (see "First Task" above)
+```
+
+For more issues, see [SETUP_TROUBLESHOOTING.md](SETUP_TROUBLESHOOTING.md).
 
 ## Project Structure
 
 ```
 .
-├── AI_Employee_Vault/          # Obsidian vault (knowledge base)
-│   ├── Inbox/                  # Drop folder for file system watcher
-│   ├── Needs_Action/           # Pending action files
-│   ├── Done/                   # Completed action files
-│   ├── Plans/                  # Generated plan files
-│   ├── Logs/                   # System logs
-│   ├── Dashboard.md            # Real-time system status
-│   └── Company_Handbook.md     # AI behavior rules
-│
-├── src/                        # Source code
-│   ├── config.py               # Configuration management
-│   ├── watchers/               # Input detection
-│   │   ├── base_watcher.py    # Abstract base class
-│   │   ├── filesystem_watcher.py
-│   │   └── gmail_watcher.py
-│   └── utils/                  # Shared utilities
-│       ├── logger.py           # Structured logging
-│       ├── yaml_parser.py      # Frontmatter parsing
-│       └── retry.py            # Retry decorator
-│
-├── .claude/skills/             # Agent Skills
-│   ├── setup-vault/            # Initialize vault structure
-│   ├── watcher-manager/        # Start/stop watchers
-│   ├── process-inbox/          # Process action files
-│   └── view-dashboard/         # Display system status
-│
-├── tests/                      # Test suite
-│   ├── unit/                   # Unit tests
-│   ├── integration/            # Integration tests
-│   └── fixtures/               # Test fixtures
-│
-├── specs/                      # Feature specifications
-│   └── 001-bronze-tier-foundation/
-│       ├── spec.md             # Feature specification
-│       ├── plan.md             # Implementation plan
-│       ├── tasks.md            # Task breakdown
-│       └── contracts/          # API contracts
-│
-├── pyproject.toml              # Python project configuration
-├── ecosystem.config.js         # PM2 process configuration
-├── .env.example                # Environment variable template
-└── README.md                   # This file
+├── AI_Employee_Vault/           # Local knowledge base
+│   ├── Dashboard.md             # System status (auto-updated)
+│   ├── Company_Handbook.md      # AI behavior rules
+│   ├── Needs_Action/            # Tasks awaiting processing
+│   ├── Plans/                   # Generated execution plans
+│   ├── Pending_Approval/        # Awaiting human approval
+│   ├── Approved/                # Human-approved actions
+│   ├── Rejected/                # Human-rejected actions
+│   ├── Done/                    # Completed actions
+│   └── Logs/                    # Audit trail (JSON)
+├── src/
+│   ├── lib/                     # Core libraries
+│   │   ├── vault.py             # Vault access layer
+│   │   ├── logging.py           # Audit logging
+│   │   └── config.py            # Configuration
+│   ├── watchers/                # Input monitors
+│   │   ├── base.py              # BaseWatcher abstract class
+│   │   ├── gmail.py             # Gmail watcher
+│   │   ├── whatsapp.py          # WhatsApp watcher
+│   │   └── linkedin.py          # LinkedIn watcher
+│   ├── orchestration/           # Core orchestration
+│   │   ├── orchestrator.py      # Main coordinator
+│   │   ├── plan_manager.py      # Plan generation
+│   │   ├── approval_manager.py  # HITL workflow
+│   │   ├── dashboard_manager.py # Dashboard updates
+│   │   └── watchdog.py          # Health monitoring
+│   └── mcp/                     # MCP servers
+│       ├── email_server.py      # Email capabilities
+│       └── social_server.py     # Social media capabilities
+├── .claude/                     # Claude Code configuration
+│   └── skills/                  # Agent Skills
+├── ecosystem.config.js          # PM2 configuration
+├── run-orchestrator.sh          # Wrapper script (activates venv)
+├── run-mcp-email.sh             # Wrapper script (activates venv)
+├── run-mcp-social.sh            # Wrapper script (activates venv)
+└── .env                         # Environment configuration
 ```
 
-## Agent Skills
+## Development
 
-Agent Skills are reusable capabilities that perform specific functions. They're located in `.claude/skills/` and can be invoked via Claude Code.
-
-### Available Skills
-
-1. **setup-vault**: Initialize vault structure
-   ```bash
-   python .claude/skills/setup-vault/scripts/main_operation.py
-   ```
-
-2. **watcher-manager**: Manage watcher processes
-   ```bash
-   python .claude/skills/watcher-manager/scripts/main_operation.py --action start --watcher-type filesystem
-   python .claude/skills/watcher-manager/scripts/main_operation.py --action status
-   ```
-
-3. **process-inbox**: Process pending action files and create plans
-   ```bash
-   python .claude/skills/process-inbox/scripts/main_operation.py --priority high
-   ```
-
-4. **view-dashboard**: Display system status
-   ```bash
-   python .claude/skills/view-dashboard/scripts/main_operation.py
-   ```
-
-5. **manage-approval**: Manage HITL workflows (list, approve, reject)
-   ```bash
-   python .claude/skills/manage-approval/scripts/main_operation.py --action list
-   ```
-
-6. **email-ops**: Send/Check Emails via MCP
-   ```bash
-   python .claude/skills/email-ops/scripts/main_operation.py --action status
-   ```
-
-7. **social-ops**: LinkedIn posting via MCP
-   ```bash
-   python .claude/skills/social-ops/scripts/main_operation.py --action list-recent
-   ```
-
-8. **scheduler**: Manage cron tasks
-   ```bash
-   python .claude/skills/scheduler/scripts/main_operation.py --action list
-   ```
-
-## Configuration
-
-All configuration is managed via environment variables in `.env`:
+### Running Tests
 
 ```bash
-# Vault Configuration
-VAULT_PATH=AI_Employee_Vault
+# Activate virtual environment
+source venv/bin/activate
 
-# Watcher Configuration
-WATCHER_TYPE=filesystem  # Options: filesystem, gmail
-WATCHER_CHECK_INTERVAL=60  # Seconds between checks
-
-# Gmail Watcher (if using Gmail)
-GMAIL_CREDENTIALS_PATH=credentials.json
-GMAIL_TOKEN_PATH=token.json
-GMAIL_QUERY=is:unread (urgent OR invoice OR payment)
-
-# Logging
-LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-LOG_RETENTION_DAYS=90
-
-# Development
-DRY_RUN=false  # Set to true for testing
-```
-
-## Testing
-
-Run the test suite:
-
-```bash
 # Run all tests
 pytest
 
+# Run specific test
+pytest tests/integration/test_watchers.py
+
 # Run with coverage
-pytest --cov=src --cov-report=html
-
-# Run specific test file
-pytest tests/unit/test_yaml_parser.py
-
-# Run integration tests only
-pytest tests/integration/
+pytest --cov=src tests/
 ```
 
-## Monitoring
-
-### Check Watcher Status
+### Code Quality
 
 ```bash
-# Using PM2
-pm2 status
-pm2 logs ai-watcher-filesystem
+# Format code
+black src/ tests/
 
-# Check logs
-tail -f AI_Employee_Vault/Logs/watcher-$(date +%Y-%m-%d).log
+# Lint code
+pylint src/
+
+# Type checking
+mypy src/
 ```
-
-### View Dashboard
-
-Open `AI_Employee_Vault/Dashboard.md` in Obsidian to see:
-- Watcher status
-- Pending actions count
-- Recent activity
-- Quick stats
-- Errors
-
-## Troubleshooting
-
-### Watcher Not Detecting Files
-
-**Problem**: Files in Inbox aren't being processed
-
-**Solutions**:
-- Check watcher is running: `pm2 status`
-- Verify supported file extensions (.txt, .md, .pdf, .docx, .csv)
-- Check logs: `AI_Employee_Vault/Logs/watcher-YYYY-MM-DD.log`
-- Ensure check_interval isn't too long
-
-### Gmail Authentication Errors
-
-**Problem**: "Invalid credentials" or "Token expired"
-
-**Solutions**:
-- Delete `token.json` and re-authenticate
-- Verify `credentials.json` is valid
-- Check Gmail API is enabled in Google Cloud Console
-- Ensure OAuth consent screen is configured
-
-### Import Errors
-
-**Problem**: `ModuleNotFoundError: No module named 'src'`
-
-**Solutions**:
-- Ensure virtual environment is activated
-- Install package in editable mode: `pip install -e .`
-- Check you're running from project root
 
 ## Security
 
-- ✅ Never commit `.env` to Git (already in `.gitignore`)
-- ✅ Store credentials in environment variables, not code
-- ✅ Rotate OAuth tokens monthly
-- ✅ Review audit logs weekly
-- ✅ Use dry-run mode for testing
+- **Local-First**: All data stays on your machine
+- **Human-in-the-Loop**: Sensitive actions require explicit approval
+- **No Secrets in Code**: Credentials use environment variables
+- **Audit Logging**: Every action logged with timestamp and details
+- **Dry-Run Mode**: Test mode available for development
 
-## Next Steps
+### Sensitive Actions (Always Require Approval)
 
-Once Silver Tier is working smoothly:
-
-1. **Gold Tier**: Full automation with accounting, social media, CEO briefings
-2. **Customization**: Modify `Company_Handbook.md` to match your workflow
-3. **Optimization**: Tune check intervals, add custom priority keywords
-
-## Documentation
-
-- **Specification**: `specs/002-silver-tier/spec.md`
-- **Implementation Plan**: `specs/002-silver-tier/plan.md`
-- **Tasks**: `specs/002-silver-tier/tasks.md`
-- **Quickstart Guide**: `specs/002-silver-tier/quickstart.md`
-- **Data Model**: `specs/002-silver-tier/data-model.md`
+- Email sending
+- Social media posting
+- Financial transactions
+- Bulk operations
+- Irreversible actions
 
 ## Contributing
 
 This is a personal project, but contributions are welcome:
 
-1. Create a feature branch: `git checkout -b 002-feature-name`
-2. Follow the Spec-Driven Development workflow
-3. Run tests before committing: `pytest`
-4. Create a pull request
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
 ## License
 
-MIT License - See LICENSE file for details
+[Your License Here]
 
 ## Support
 
-- **Issues**: Check logs in `AI_Employee_Vault/Logs/`
-- **Documentation**: See `specs/002-silver-tier/`
-- **Community**: Join Wednesday research meetings
+- **Documentation**: See docs listed above
+- **Issues**: Check [SETUP_TROUBLESHOOTING.md](SETUP_TROUBLESHOOTING.md)
+- **Logs**: `pm2 logs --err --lines 100`
+
+## Roadmap
+
+### Silver Tier (Current) ✅
+- Multi-channel monitoring (Gmail, WhatsApp, LinkedIn)
+- Intelligent plan generation
+- HITL approval workflow
+- MCP servers for email and social
+- Production deployment with PM2
+
+### Gold Tier (Future)
+- Accounting integration (Xero)
+- Advanced social media features
+- Multi-step autonomous workflows
+- Cloud deployment support
+- Advanced analytics and reporting
+
+## Acknowledgments
+
+Built with:
+- [Claude Code](https://claude.com/product/claude-code) - AI development assistant
+- [FastMCP](https://github.com/jlowin/fastmcp) - MCP server framework
+- [Playwright](https://playwright.dev/) - Browser automation
+- [PM2](https://pm2.keymetrics.io/) - Process management
 
 ---
 
-**Congratulations!** You now have a working Silver Tier Personal AI Employee system. The foundation is in place for building more advanced automation in Gold tier.
+**Status**: Production Ready ✅
+**Last Updated**: 2026-01-15
+**Maintainer**: [Your Name]
