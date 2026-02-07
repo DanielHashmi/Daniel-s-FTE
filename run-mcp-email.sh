@@ -1,4 +1,5 @@
 #!/bin/bash
-cd "/mnt/c/Users/kk/Desktop/Daniel's FTE"
-export PYTHONPATH="/mnt/c/Users/kk/Desktop/Daniel's FTE"
-exec ./venv/bin/python3 src/mcp/email_server.py
+cd "$(dirname "$0")"
+export PATH=$PATH:/usr/local/bin
+cd mcp-servers/email-mcp
+npm start

@@ -108,12 +108,21 @@ class GmailWatcher(BaseWatcher):
             sender = next((h['value'] for h in headers if h['name'] == 'From'), '(unknown)')
             snippet = message.get('snippet', '')
 
-            # Create Action File
+            # Classify email to get intelligent priority and tags
+            from src.utils.email_classifier import get_classifier
+            classifier = get_classifier()
+            classification = classifier.classify_email(sender, subject, snippet)
+
+            # Create Action File with intelligent metadata
             metadata = {
                 "sender": sender,
                 "subject": subject,
                 "thread_id": message['threadId'],
-                "msg_id": msg_id
+                "msg_id": msg_id,
+                "tags": classification.get("tags", []),
+                "category": classification.get("category", "notification"),
+                "requires_action": classification.get("requires_action", False),
+                "suggested_action": classification.get("suggested_action", "archive")
             }
 
             content = f"# Incoming Email\n\n**From:** {sender}\n**Subject:** {subject}\n\n## Snippet\n{snippet}\n"
@@ -122,7 +131,7 @@ class GmailWatcher(BaseWatcher):
                 type="email",
                 content=content,
                 metadata=metadata,
-                priority="urgent" # Because we queried for 'important'
+                priority=classification.get("priority", "normal")
             )
 
             # Mark as read so we don't process again?

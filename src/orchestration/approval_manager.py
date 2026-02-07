@@ -9,10 +9,12 @@ import hashlib
 import yaml
 import subprocess
 import json
+import sys
 from pathlib import Path
 from typing import Dict, Any
 from src.lib.logging import get_logger
 from src.lib.vault import vault
+import os
 
 class ApprovalManager:
     def __init__(self):
@@ -143,7 +145,7 @@ context:
                         # Call main_operation.py directly
                         script_path = Path(".claude/skills/odoo-accounting/scripts/main_operation.py")
                         result = subprocess.run(
-                            ["python3", str(script_path), "--mode", "live", "post", str(invoice_id), "--no-approval"],
+                            [sys.executable, str(script_path), "--mode", "live", "post", str(invoice_id), "--no-approval"],
                             text=True,
                             capture_output=True,
                             check=True
@@ -153,6 +155,31 @@ context:
                         self.logger.error(f"Invoice post failed: {e.stderr}")
                 else:
                     self.logger.error("Missing invoice_id in approval metadata")
+
+            # Qwen Autonomous Delegation
+            elif os.getenv("REASONING_ENGINE") == "qwen":
+                self.logger.info(f"Delegating generic task to Qwen: {filepath.name}")
+                
+                # Use body as prompt, sanitizing quotes
+                prompt = body.replace('"', '\\"')
+                if len(prompt) > 2000:
+                   prompt = prompt[:2000]
+
+                try:
+                    # qwen -p "prompt" -y
+                    cmd = f'qwen -p "{prompt}" -y'
+                    self.logger.info(f"Running Qwen command: {cmd}")
+                    
+                    # Run with shell=True to ensure command is found
+                    process = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                    
+                    if process.returncode == 0:
+                        self.logger.info(f"Qwen execution success: {process.stdout}")
+                    else:
+                        self.logger.error(f"Qwen execution failed (exit {process.returncode}): {process.stderr}")
+
+                except Exception as e:
+                    self.logger.error(f"Qwen execution exception: {e}")
 
             else:
                 self.logger.info(f"Approved action ready for execution (No automatic handler): {filepath.name}")

@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # Dashboard - Next.js Web UI
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-danielsecurepassfornow}
+      - SESSION_SECRET=${SESSION_SECRET:-daniel-fte-secret-2026}
+      - VAULT_PATH=/app/vault
+      - PROJECT_ROOT=/app
+    volumes:
+      - ./AI_Employee_Vault:/app/vault
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    networks:
+      - fte-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/auth/session"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Orchestrator - Main Python coordinator
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/orchestrator.Dockerfile
+    environment:
+      - DRY_RUN=${DRY_RUN:-true}
+      - HITL_REQUIRED=${HITL_REQUIRED:-true}
+      - VAULT_PATH=/app/vault
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./AI_Employee_Vault:/app/vault
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    networks:
+      - fte-network
+    depends_on:
+      - dashboard
+
+  # Social MCP Server
+  social-mcp:
+    build:
+      context: ./mcp-servers/social-mcp
+      dockerfile: Dockerfile
+    environment:
+      - TWITTER_API_KEY=${TWITTER_API_KEY}
+      - TWITTER_API_SECRET=${TWITTER_API_SECRET}
+      - TWITTER_ACCESS_TOKEN=${TWITTER_ACCESS_TOKEN}
+      - TWITTER_ACCESS_TOKEN_SECRET=${TWITTER_ACCESS_TOKEN_SECRET}
+      - META_ACCESS_TOKEN=${META_ACCESS_TOKEN}
+      - FACEBOOK_PAGE_ID=${FACEBOOK_PAGE_ID}
+      - INSTAGRAM_BUSINESS_ID=${INSTAGRAM_BUSINESS_ID}
+      - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
+    restart: unless-stopped
+    networks:
+      - fte-network
+
+  # Email MCP Server
+  email-mcp:
+    build:
+      context: ./mcp-servers/email-mcp
+      dockerfile: Dockerfile
+    environment:
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
+    volumes:
+      - ./credentials:/app/credentials:ro
+    restart: unless-stopped
+    networks:
+      - fte-network
+
+  # Gmail Watcher
+  gmail-watcher:
+    build:
+      context: .
+      dockerfile: docker/gmail-watcher.Dockerfile
+    environment:
+      - VAULT_PATH=/app/vault
+      - GMAIL_TOKEN_PATH=/app/credentials/gmail_token.json
+    volumes:
+      - ./AI_Employee_Vault:/app/vault
+      - ./credentials:/app/credentials:ro
+    restart: unless-stopped
+    networks:
+      - fte-network
+    depends_on:
+      - orchestrator
+
+networks:
+  fte-network:
+    driver: bridge
+
+volumes:
+  vault-data:

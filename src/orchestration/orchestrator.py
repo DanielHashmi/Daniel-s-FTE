@@ -17,6 +17,8 @@ from src.lib.vault import vault
 from src.watchers.gmail import GmailWatcher 
 from src.watchers.whatsapp import WhatsAppWatcher
 from src.watchers.linkedin import LinkedInWatcher
+from src.watchers.odoo import OdooWatcher
+from src.watchers.banking_mock import BankingMockWatcher
 
 # Import Plan Manager & Approval Manager
 from src.orchestration.plan_manager import PlanManager
@@ -36,7 +38,8 @@ class Orchestrator:
         self.watchers = [
             GmailWatcher(interval=60), 
             WhatsAppWatcher(interval=60),
-            LinkedInWatcher(interval=300)
+            LinkedInWatcher(interval=300),
+            OdooWatcher(interval=60)
         ]
         self.watcher_threads = []
 
@@ -92,6 +95,8 @@ class Orchestrator:
 
     def run_cycle(self):
         """Single coordination cycle."""
+        current_time = time.time()
+        
         # 1. Check for Pending Actions (Inbox processing)
         self.check_needs_action()
 
@@ -104,11 +109,7 @@ class Orchestrator:
         # 4. Check for Active Plans (Execution monitoring)
         self.check_active_plans()
 
-        # 5. Odoo Daily Sync (Every 24h or manual trigger)
-        current_time = time.time()
-        if current_time - self.last_odoo_sync > 86400: # 24 hours
-            self.sync_odoo()
-            self.last_odoo_sync = current_time
+        # 5. Odoo Sync is now handled by OdooWatcher thread
 
         # 6. Watchdog / Health Check (Every 60s)
         if current_time - self.last_health_check > 60:
@@ -202,7 +203,8 @@ class Orchestrator:
             script_path = Path(".claude/skills/odoo-accounting/scripts/main_operation.py")
             if script_path.exists():
                 import subprocess
-                subprocess.run(["python3", str(script_path), "--action", "sync"], check=True)
+                # Use current python executable and correct command structure
+                subprocess.run([sys.executable, str(script_path), "sync"], check=True)
                 self.logger.info("Odoo sync completed successfully")
                 self.recent_activity.append("Synced Odoo accounting")
             else:

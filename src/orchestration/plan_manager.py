@@ -7,8 +7,10 @@ This is the "Reasoning" step of the AI Employee loop.
 Per hackathon requirements: "Claude Code acts as the reasoning engine...
 It uses its File System tools to read your tasks and write reports."
 
-The plan manager now uses Claude Code CLI for intelligent plan generation,
-with fallback to template-based logic if Claude is unavailable.
+The plan manager now uses:
+1. Claude Code CLI (Primary Intelligence)
+2. Qwen Code Agent (Fallback Intelligence)
+3. Templates (Last Resort Failsafe)
 """
 
 import time
@@ -17,56 +19,68 @@ import yaml
 import re
 import os
 from typing import Dict, Any, Optional
+from dotenv import load_dotenv
 from src.lib.logging import get_logger
 from src.lib.vault import vault
 
-# Import Claude invoker for intelligent plan generation
+# Load environment variables
+load_dotenv()
+
+# Import Claude invoker
 try:
     from src.orchestration.claude_invoker import get_claude_invoker, ClaudeInvoker
     CLAUDE_INVOKER_AVAILABLE = True
 except ImportError:
     CLAUDE_INVOKER_AVAILABLE = False
 
+# Import Qwen invoker
+try:
+    from src.orchestration.qwen_invoker import get_qwen_invoker, QwenInvoker
+    QWEN_INVOKER_AVAILABLE = True
+except ImportError:
+    QWEN_INVOKER_AVAILABLE = False
+
 
 class PlanManager:
-    def __init__(self, use_claude: bool = True):
+    def __init__(self, use_ai: bool = True):
         """
         Initialize the Plan Manager.
-
-        Args:
-            use_claude: If True, attempt to use Claude Code for plan generation.
-                       If False or Claude unavailable, use template-based logic.
         """
         self.logger = get_logger("plan_manager")
         self.sensitive_keywords = ["email", "pay", "send", "post", "delete", "archive", "transfer", "invite"]
 
-        # Initialize Claude invoker if available and requested
+        self.use_ai = use_ai
         self.claude_invoker: Optional[ClaudeInvoker] = None
-        self.use_claude = use_claude
+        self.qwen_invoker: Optional[QwenInvoker] = None
 
-        if use_claude and CLAUDE_INVOKER_AVAILABLE:
-            try:
-                self.claude_invoker = get_claude_invoker(vault_path=str(vault.root))
-                if self.claude_invoker.is_available:
-                    self.logger.info("Claude Code integration enabled for intelligent planning")
-                else:
-                    self.logger.info("Claude Code CLI not found - using template-based planning")
-                    self.claude_invoker = None
-            except Exception as e:
-                self.logger.error(f"Failed to initialize Claude invoker: {e}")
-                self.claude_invoker = None
-        else:
-            self.logger.info("Template-based planning mode (Claude integration disabled)")
+        if use_ai:
+            # Initialize Claude
+            if CLAUDE_INVOKER_AVAILABLE:
+                try:
+                    self.claude_invoker = get_claude_invoker(vault_path=str(vault.root))
+                    if self.claude_invoker.is_available:
+                        self.logger.info("Claude Code: ENABLED (Primary)")
+                    else:
+                        self.logger.info("Claude Code: NOT FOUND")
+                except Exception as e:
+                    self.logger.error(f"Failed to init Claude: {e}")
+
+            # Initialize Qwen
+            # Initialize Qwen
+            if QWEN_INVOKER_AVAILABLE:
+                try:
+                    self.qwen_invoker = get_qwen_invoker(vault_path=str(vault.root))
+                    if self.qwen_invoker.is_available:
+                        self.logger.info("Qwen Code Agent: ENABLED (Fallback)")
+                    else:
+                        self.logger.info("Qwen Code Agent: NOT FOUND")
+                except Exception as e:
+                    self.logger.error(f"Failed to init Qwen: {e}")
 
     def create_plan_from_action(self, action_file_path: Any) -> str:
         """
         Read an action file and generate a plan.
-
-        If Claude Code is available, uses intelligent AI-powered planning.
-        Otherwise, falls back to rule-based template logic.
-
-        Returns:
-            The filename of the created plan, or empty string on failure.
+        Priority: Claude -> Qwen -> Template
         """
         try:
             content = vault.read_file(action_file_path)
@@ -79,25 +93,56 @@ class PlanManager:
 
             frontmatter = yaml.safe_load(parts[1])
             body = parts[2]
-
-            # Try Claude Code first if available
             plan_content = None
-            if self.claude_invoker and self.claude_invoker.is_available:
-                self.logger.info("Attempting Claude Code intelligent planning...")
+            used_engine = "template"
+
+            # Determine primary engine from environment
+            primary_engine = os.environ.get("REASONING_ENGINE", "claude").lower()
+            
+            # 1. Try Primary Engine
+            if primary_engine == "qwen" and self.qwen_invoker and self.qwen_invoker.is_available:
+                self.logger.info("Preferred Engine: Qwen Code Agent. Attempting...")
+                plan_content = self.qwen_invoker.invoke_for_planning(
+                    action_content=content,
+                    action_metadata=frontmatter
+                )
+                if plan_content:
+                    used_engine = "qwen"
+                    self.logger.info("Plan generated by Qwen Code Agent")
+
+            elif primary_engine == "claude" and self.claude_invoker and self.claude_invoker.is_available:
+                self.logger.info("Preferred Engine: Claude Code. Attempting...")
                 plan_content = self.claude_invoker.invoke_for_planning(
                     action_content=content,
                     action_metadata=frontmatter
                 )
-
                 if plan_content:
-                    self.logger.info("Successfully generated plan using Claude Code")
-                else:
-                    self.logger.info("Claude Code returned no output, falling back to templates")
+                    used_engine = "claude"
+                    self.logger.info("Plan generated by Claude Code")
 
-            # Fallback to template-based logic
+            # 2. Fallback (Swap engines)
             if not plan_content:
-                self.logger.info("Using template-based plan generation")
+                if primary_engine == "qwen" and self.claude_invoker and self.claude_invoker.is_available:
+                    self.logger.info("Qwen failed/unavailable. Fallback to Claude...")
+                    plan_content = self.claude_invoker.invoke_for_planning(
+                        action_content=content,
+                        action_metadata=frontmatter
+                    )
+                    if plan_content: used_engine = "claude"
+
+                elif primary_engine == "claude" and self.qwen_invoker and self.qwen_invoker.is_available:
+                    self.logger.info("Claude failed/unavailable. Fallback to Qwen...")
+                    plan_content = self.qwen_invoker.invoke_for_planning(
+                        action_content=content,
+                        action_metadata=frontmatter
+                    )
+                    if plan_content: used_engine = "qwen"
+
+            # 3. Last Resort: Templates
+            if not plan_content:
+                self.logger.warning("All AI agents failed. Falling back to templates.")
                 plan_content = self._generate_plan_logic(frontmatter, body)
+                used_engine = "template"
 
             # Write Plan File
             timestamp = int(time.time())
@@ -110,7 +155,7 @@ class PlanManager:
                 target=str(path),
                 details={
                     "source_action": frontmatter.get('id'),
-                    "used_claude": bool(self.claude_invoker and plan_content)
+                    "engine": used_engine
                 }
             )
 
@@ -121,20 +166,16 @@ class PlanManager:
             return ""
 
     def _generate_plan_logic(self, meta: Dict[str, Any], body: str) -> str:
-        """
-        Internal template-based logic to determine the plan.
-        This is the fallback when Claude Code is not available.
-        """
+        """Template fallback logic."""
         action_type = meta.get("type", "unknown")
         action_id = meta.get("id", "unknown")
 
-        # Default template
         plan = f"""---
 id: "plan_{hashlib.md5(str(time.time()).encode()).hexdigest()[:8]}"
 action_ref: "{action_id}"
 created: "{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
 status: "planning"
-planning_mode: "template"
+planning_mode: "template_fallback"
 ---
 
 # Objective
@@ -146,7 +187,6 @@ Handle incoming {action_type} from {meta.get('source', 'unknown')}.
 # Execution Steps
 """
 
-        # Logic based on type
         if action_type == "email":
             plan += self._plan_email_response(meta)
         elif action_type == "message":
@@ -161,67 +201,30 @@ Handle incoming {action_type} from {meta.get('source', 'unknown')}.
             plan += "- [ ] 3. Execute or request approval\n"
 
         plan += "\n# Note\n"
-        plan += "*This plan was generated using template logic. For intelligent planning, ensure Claude Code CLI is installed and available.*\n"
+        plan += "*Generated via Template Fallback (Claude/Qwen unavailable).*\n"
 
         return plan
 
     def _plan_email_response(self, meta: Dict[str, Any]) -> str:
-        """Template for email action planning."""
-        steps = ""
-        steps += "- [ ] 1. Analyze email content\n"
-        steps += "- [ ] 2. Draft response\n"
-        # For email, sending is always sensitive
-        steps += "- [ ] 3. **[APPROVAL REQUIRED]** Send Reply\n"
-        steps += "- [ ] 4. Archive Email\n"
+        steps = "- [ ] 1. Analyze email content\n- [ ] 2. Draft response\n- [ ] 3. **[APPROVAL REQUIRED]** Send Reply\n- [ ] 4. Archive Email\n"
         return steps
 
     def _plan_message_response(self, meta: Dict[str, Any]) -> str:
-        """Template for message action planning."""
-        steps = ""
-        steps += "- [ ] 1. Read message\n"
-        steps += "- [ ] 2. Draft reply\n"
-        steps += "- [ ] 3. **[APPROVAL REQUIRED]** Send Reply\n"
-        return steps
+        return "- [ ] 1. Read message\n- [ ] 2. Draft reply\n- [ ] 3. **[APPROVAL REQUIRED]** Send Reply\n"
 
     def _plan_social_post(self, meta: Dict[str, Any]) -> str:
-        """Template for social media post planning."""
-        steps = ""
-        steps += "- [ ] 1. Review post content\n"
-        steps += "- [ ] 2. Check for duplicate content\n"
-        steps += "- [ ] 3. Format for platform\n"
-        steps += "- [ ] 4. **[APPROVAL REQUIRED]** Publish Post\n"
-        steps += "- [ ] 5. Log post URL and engagement\n"
-        return steps
+        return "- [ ] 1. Review content\n- [ ] 2. Format for platform\n- [ ] 3. **[APPROVAL REQUIRED]** Publish Post\n"
 
     def _plan_file_processing(self, meta: Dict[str, Any]) -> str:
-        """Template for file drop action planning."""
-        steps = ""
-        steps += "- [ ] 1. Analyze file content\n"
-        steps += "- [ ] 2. Determine file type and purpose\n"
-        steps += "- [ ] 3. Process according to type\n"
-        steps += "- [ ] 4. Move to appropriate folder\n"
-        return steps
-
-    def get_planning_mode(self) -> str:
-        """Return the current planning mode."""
-        if self.claude_invoker and self.claude_invoker.is_available:
-            return "claude_code"
-        return "template"
+        return "- [ ] 1. Analyze file\n- [ ] 2. Process according to type\n- [ ] 3. Move to appropriate folder\n"
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get planning statistics."""
-        stats = {
-            "planning_mode": self.get_planning_mode(),
+        return {
             "claude_available": bool(self.claude_invoker and self.claude_invoker.is_available),
+            "qwen_available": bool(self.qwen_invoker and self.qwen_invoker.is_available)
         }
-
-        if self.claude_invoker:
-            stats["claude_stats"] = self.claude_invoker.get_stats()
-
-        return stats
 
 
 if __name__ == "__main__":
     pm = PlanManager()
-    print(f"Planning mode: {pm.get_planning_mode()}")
     print(f"Stats: {pm.get_stats()}")

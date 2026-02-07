@@ -1,21 +1,29 @@
 module.exports = {
-  apps: [{
-    name: 'ai-orchestrator',
-    script: 'src/orchestration/orchestrator.py',
-    interpreter: './venv/bin/python',
-    cwd: process.cwd(),
-    env: { PYTHONPATH: '.' },
-    error_file: './AI_Employee_Vault/Logs/orchestrator-err.log',
-    out_file: './AI_Employee_Vault/Logs/orchestrator-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm Z'
-  }, {
-    name: 'mcp-email',
-    script: './mcp-servers/email-mcp/index.js'
-  }, {
-    name: 'mcp-social',
-    script: './mcp-servers/social-mcp/index.js'
-  }, {
-    name: 'mcp-odoo',
-    script: './deployment/cloud/odoo-mcp.js'
-  }]
+  apps: [
+    {
+      name: 'daniel-fte-dashboard',
+      cwd: './dashboard',
+      script: 'npm',
+      args: 'run dev',
+      env: {
+        NODE_ENV: 'development',
+        PORT: 3000,
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+      },
+    },
+    {
+      name: 'daniel-fte-orchestrator',
+      script: 'python',
+      args: '-m src.orchestration.orchestrator',
+      interpreter: 'python',
+      env: {
+        PYTHONPATH: '.',
+        DRY_RUN: 'true',
+        HITL_REQUIRED: 'true',
+      },
+    },
+  ],
 };
