@@ -1,121 +1,85 @@
 ---
-title: Platinum Tier - Cloud + Local Executive AI Employee
+title: "Platinum Tier - Local-First Digital FTE (Dashboard + Brain)"
 short_name: platinum-tier
 tier: platinum
 feature_number: 004
 ratified: 2026-01-20
-last_amended: 2026-01-20
-status: draft
+last_amended: 2026-02-14
+status: active
 ---
 
-# Platinum Tier: Always-On Cloud + Local Executive (Production-ish AI Employee)
+# Platinum Tier: Local-First Digital FTE (Current Repo Reality)
 
 ## User Description
-Build the Platinum Tier as defined in the hackathon document: Deploy the AI Employee on cloud 24/7 with work-zone specialization between Cloud (draft-only actions) and Local (approval/execution). Use synced vault for communication, deploy Odoo on cloud, and demonstrate offline-online handover workflow.
+
+Operate a local-first "Digital FTE" that:
+- Provides a web UI to manage approvals and social drafts
+- Uses a Python orchestrator to monitor the vault and execute approved actions
+- Treats external/public actions as sensitive and requires explicit human approval
+- Can generate and publish Facebook posts using Qwen (copy generation) + Playwright (browser automation)
 
 ## User Scenarios
 
-### Primary Scenario: Offline Email Processing Handover
-1. Email arrives while Local is offline
-2. Cloud Agent triages email, drafts reply, creates approval file in synced vault
-3. Local Agent (when online) presents approval request to user
-4. User approves via file move to /Approved
-5. Local Agent executes send via MCP, logs to audit, moves to /Done
-6. Both agents see completion via vault sync
+### Scenario A: Create, Approve, Post to Facebook (Primary)
+1. User opens the dashboard Social page
+2. User generates a draft with Qwen (optional) and edits the content
+3. User queues the post, creating an approval file in `AI_Employee_Vault/Pending_Approval/`
+4. User approves in the UI (or moves the file to `AI_Employee_Vault/Approved/`)
+5. Orchestrator posts the approved `## Content` to Facebook via Playwright
+6. The approval file is moved to `AI_Employee_Vault/Done/` and an audit log entry is written
 
-### Secondary Scenario: Odoo Accounting Workflow
-1. Cloud Agent syncs draft invoices from cloud Odoo instance
-2. Creates approval requests for posting/payments
-3. Local Agent handles final approvals and execution
-4. Audit trail maintained in shared vault
+### Scenario B: Human-in-the-Loop Safety (Always-On)
+1. A sensitive action is proposed (public post, invoice posting, etc.)
+2. The system writes a clear approval request file
+3. Nothing executes until the file is explicitly approved
+4. Rejected approvals are not executed
 
-### Edge Scenario: Conflict Resolution
-1. Both agents detect same task simultaneously
-2. Claim-by-move rule (/In_Progress/<agent>/) prevents double-work
-3. Losing agent ignores task, winning agent completes
+### Scenario C: Orchestrator Liveness in the UI
+1. Orchestrator runs locally
+2. It writes a heartbeat file on a short interval
+3. The dashboard shows whether the brain is currently running
 
 ## Success Criteria
-- Cloud deployment runs 24/7 with 99.9% uptime (PM2 monitoring)
-- Vault sync completes <30s with Git/Syncthing
-- Offline-online handover completes end-to-end in <5min user time
-- No secret data synced (credentials stay local/cloud separated)
-- Odoo MCP integration supports draft/live modes
-- 100% task ownership via claim-by-move (no double-processing)
-- Demo video shows complete email workflow across cloud/local boundary
+
+- The dashboard runs locally and can view approvals, social drafts, and status.
+- The orchestrator detects approved items within a short time window (seconds).
+- For Facebook approvals, the system posts exactly what was approved (no regeneration after approval).
+- `DRY_RUN=true` prevents live external actions (including browser posting).
+- No secrets are committed: credentials are provided via environment variables / local session dirs.
 
 ## Functional Requirements
 
-### FR-001: Cloud Deployment Infrastructure
-- Deploy orchestrator, watchers, MCP servers on cloud VM (Oracle Free Tier)
-- PM2 process manager for all services with auto-restart
-- Health monitoring dashboard in vault (/Cloud_Status.md)
-- HTTPS for Odoo instance with SSL cert (Let's Encrypt)
+### FR-001: Vault-First Workflow (Local-First)
+- The vault folder `AI_Employee_Vault/` is the source of truth for actions, approvals, and logs.
+- Approval folders are used as the execution state machine:
+  - `Pending_Approval/`, `Approved/`, `Rejected/`, `Done/`
 
-### FR-002: Work-Zone Specialization
-- Cloud scope: Email triage/drafts, social drafts/scheduling, Odoo draft syncs
-- Local scope: Approvals, WhatsApp, banking/payments, final executions
-- Enforced via domain-specific folders: /Needs_Action/cloud-email/, /Needs_Action/local-payments/
+### FR-002: Web UI for Management
+- A local dashboard provides:
+  - Login gate (password-based)
+  - Social post creation and queueing for approval
+  - Approval review and approve/reject actions
+  - Visibility into orchestrator running status
 
-### FR-003: Synced Vault Communication (Phase 1)
-- Bidirectional vault sync using Git (push/pull every 30s) or Syncthing
-- Communication via structured folders:
-  | Folder | Purpose | Writer | Reader |
-  |--------|---------|--------|--------|
-  | /Needs_Action/cloud-* | Cloud-detected tasks | Cloud | Local |
-  | /Needs_Action/local-* | Local-detected tasks | Local | Cloud |
-  | /Pending_Approval/* | Approval requests | Both | Human/Local |
-  | /In_Progress/<agent>/ | Task ownership claim | Agent | Both |
-  | /Updates/cloud | Cloud status updates | Cloud | Local |
-- Claim-by-move rule: Move task file to own it exclusively
+### FR-003: Orchestrator Executes Approved Items
+- The orchestrator monitors `AI_Employee_Vault/Approved/` for `.md` and `.yaml` files.
+- On successful execution it moves items to `AI_Employee_Vault/Done/`.
+- On transient failures it retries with a backoff (without losing the approval file).
 
-### FR-004: Odoo Cloud Deployment
-- Odoo Community 19+ on cloud VM with Accounting, Sales modules
-- JSON-RPC API exposed via HTTPS
-- Automated daily backups to object storage
-- MCP server integration for draft/live accounting actions
-- Draft mode: Read/sync only, no writes
-- Live mode: Full CRUD with Local approval
+### FR-004: Facebook Posting via Qwen + Playwright
+- Draft generation uses Qwen CLI locally.
+- Publishing uses Playwright with a persistent session directory (`FACEBOOK_SESSION_DIR`).
+- If the approved file contains `## Content`, that text is posted exactly.
+- If no content exists, the system may generate then post (but this is not the normal UI flow).
 
-### FR-005: Security & Data Isolation
-- Secrets never sync (.env, tokens, WhatsApp sessions, banking creds stay environment-specific)
-- Vault sync excludes: node_modules, .git, secrets folders
-- Audit log of all sync operations (file moved/created/deleted)
-- Single-writer rule for Dashboard.md (Local only)
+### FR-005: Auditability and Safety Controls
+- Every approval decision is logged with timestamp and file reference.
+- Orchestrator liveness is observable via a heartbeat file in `AI_Employee_Vault/Logs/`.
+- A global `DRY_RUN` mode exists for safe testing.
 
-### FR-006: Demo Workflow Validation
-- End-to-end test: Email → Cloud draft → Local approval → Execution
-- Verify no double-processing via claim-by-move
-- Measure sync latency <30s, handover time <5min
+## Non-Goals (In This Repo As Implemented Today)
 
-## Key Entities
+- Always-on cloud deployment, PM2-managed cloud services, Syncthing-based cloud/local handover.
+- Multi-agent claim-by-move conflict resolution between cloud and local agents.
+- Storing or syncing secrets (tokens, cookies, sessions) via git or vault sync.
 
-### CloudAgent
-- Capabilities: Email triage, social drafts, Odoo draft sync
-- Owned folders: /Needs_Action/cloud-*, /Updates/cloud
-- Constraints: No WhatsApp, no banking, no final executions
-
-### LocalAgent
-- Capabilities: Approvals, WhatsApp, banking, final executions
-- Owned folders: /Needs_Action/local-*, Dashboard.md writes
-- Constraints: No cloud deploys, no always-on operation
-
-### SyncedVault
-- State: Markdown files only, no secrets/binaries
-- Sync mechanism: Git or Syncthing
-- Conflict resolution: Claim-by-move + last-write-wins for status files
-
-## Assumptions
-- Oracle Cloud Free Tier VM available (2 instances max)
-- Git/Syncthing sync reliable over internet
-- Human user approves within 24h of requests
-- Odoo self-hosted (no SaaS)
-
-## Risks & Mitigations
-- **Risk**: Sync conflicts → Mitigation: Claim-by-move + unique filenames
-- **Risk**: Secrets leak → Mitigation: .gitignore + sync exclusions
-- **Risk**: Cloud downtime → Mitigation: Local fallback + offline queue
-
-## Non-Goals
-- Direct agent-to-agent messaging (Phase 2)
-- Multi-cloud/multi-local scaling
-- Real-time sync (<5s latency)

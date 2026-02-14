@@ -1,40 +1,38 @@
-# AI Employee Platinum Tier - Demo Script
+# Demo Script (Local-First Digital FTE)
 
-## Introduction (0:00-1:00)
-- **Concept**: Presenting the Personal AI Employee (Digital FTE).
-- **Vision**: "Your life and business on autopilot. Local-first, agent-driven, human-in-the-loop."
-- **Dashboard**: Show Obsidian Dashboard.md with status "Platinum Tier - Sync Active".
+## 1) Start Services
 
-## Scenario 1: Cloud-to-Local Email Handover (1:00-3:00)
-1. **Trigger**: Send an email to the monitored account asking for an invoice.
-2. **Cloud Detection**: Show `cloud-email-watcher` log detecting the email.
-3. **Drafting**: Show `draft_reply.py` generating a response in the Cloud Vault.
-4. **Sync**: Simulate/Show the file appearing in the Local Vault's `Pending_Approval` folder.
-5. **Approval**: Move the file to `Approved`.
-6. **Execution**: Show the Local Orchestrator picking up the approval and sending the email.
+```powershell
+START_DASHBOARD.bat
+START_BRAIN.bat
+```
 
-## Scenario 2: Odoo Accounting & CEO Briefing (3:00-5:00)
-1. **Odoo Sync**: Run the `odoo-accounting` sync skill.
-2. **Data**: Show the synced transactions in `AI_Employee_Vault/Accounting/`.
-3. **Briefing**: Trigger the `ceo-briefing` generation.
-4. **Result**: Review the "Monday Morning CEO Briefing" in Obsidian, showing revenue, bottlenecks, and cost-saving suggestions.
+Open `http://localhost:3000` and log in.
 
-## Scenario 3: Ralph Wiggum Autonomous Loop (5:00-7:00)
-1. **Task**: Drop a complex multi-step task file into `Needs_Action` (e.g., "Research 5 competitors, draft a social post for each, and prepare a comparison summary").
-2. **Loop Start**: Show the orchestrator detecting a "suitable for Ralph" task.
-3. **Persistence**: Show Claude working through multiple iterations, seeing its own state, and continuing until `TASK_COMPLETE` is reached.
-4. **Completion**: Show the final summary in the `Done` folder.
+## 2) Show HITL Approval Folders
 
-## Scenario 4: Social Media Multi-Post (7:00-8:30)
-1. **Command**: Use the `social-media-suite` skill to post to Twitter and LinkedIn.
-2. **Approval**: Show the separate approval files created for each platform.
-3. **Safety**: Approve Twitter but reject LinkedIn (to show flexibility).
-4. **Live Check**: Show the successful post appearing on the platform.
+- `AI_Employee_Vault/Pending_Approval/`
+- `AI_Employee_Vault/Approved/`
+- `AI_Employee_Vault/Rejected/`
+- `AI_Employee_Vault/Done/`
 
-## Conclusion (8:30-10:00)
-- **Security**: Highlight that secrets stayed local and never synced to the cloud.
-- **ROI**: Mention the 85-90% cost saving of a Digital FTE vs Human FTE.
-- **Next Steps**: Inviting to the Wednesday Research Meeting.
+Show heartbeat:
+- `AI_Employee_Vault/Logs/orchestrator_heartbeat.json`
 
----
-*Digital FTE: The New Unit of Value*
+## 3) Facebook Posting (Qwen + Playwright)
+
+One-time session capture (if needed):
+```powershell
+python src/social/facebook_qwen_poster.py --mode login
+```
+
+Demo flow:
+1. Dashboard Social page: generate with Qwen, edit, queue for approval.
+2. Approve in the dashboard.
+3. Orchestrator posts the approved `## Content` (no regeneration after approval).
+
+## 4) Audit Trail
+
+Show:
+- `AI_Employee_Vault/Logs/YYYY-MM-DD.json`
+

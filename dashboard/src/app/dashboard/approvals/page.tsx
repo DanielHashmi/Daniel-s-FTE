@@ -9,6 +9,8 @@ interface Approval {
     content: string;
     priority: string;
     timestamp: string;
+    action?: string;
+    platform?: string;
 }
 
 export default function ApprovalsPage() {
@@ -38,10 +40,14 @@ export default function ApprovalsPage() {
         return () => clearInterval(interval);
     }, [fetchApprovals]);
 
-    const handleAction = async (id: string, action: "approve" | "reject", autoSend: boolean = false) => {
+    const handleAction = async (
+        approval: Approval,
+        action: "approve" | "reject",
+        autoSend: boolean = false
+    ) => {
         setActionLoading(true);
         try {
-            const res = await fetch(`/api/approvals/${id}`, {
+            const res = await fetch(`/api/approvals/${approval.id}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action }),
@@ -51,22 +57,31 @@ export default function ApprovalsPage() {
 
             if (data.success) {
                 // If approved and it's an email reply, optionally send it
-                if (action === "approve" && autoSend && selectedApproval?.type?.includes("email")) {
+                if (action === "approve" && autoSend && approval.type?.includes("email")) {
                     // Trigger send
                     const sendRes = await fetch(`/api/email/send`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ id })
+                        body: JSON.stringify({ id: approval.id })
                     });
 
                     const sendData = await sendRes.json();
                     if (sendData.success) {
-                        alert(`Approved and sent successfully!`);
+                        alert("Approved and sent successfully!");
                     } else {
                         alert(`Approved but send failed: ${sendData.error}`);
                     }
                 } else {
-                    alert(`${action === "approve" ? "Approved" : "Rejected"} successfully`);
+                    const platform = String(approval.platform || "").toLowerCase();
+                    if (action === "approve" && approval.type === "social" && platform === "facebook") {
+                        alert(
+                            "Approved. Facebook automation is executing now.\n\n" +
+                                "You should see a Playwright browser window open on this machine. " +
+                                "If a Facebook login page appears, log in manually; the session is saved under facebook_session."
+                        );
+                    } else {
+                        alert(`${action === "approve" ? "Approved" : "Rejected"} successfully`);
+                    }
                 }
             }
 
@@ -96,12 +111,12 @@ export default function ApprovalsPage() {
                     <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>Approvals</h1>
                     <p style={{ fontSize: 14, color: "var(--text-muted)" }}>{approvals.length} items pending review</p>
                 </div>
-                <button onClick={fetchApprovals} className="btn btn-secondary btn-sm">↻ Refresh</button>
+                <button onClick={fetchApprovals} className="btn btn-secondary btn-sm">Refresh</button>
             </div>
 
             {approvals.length === 0 ? (
                 <div className="card" style={{ textAlign: "center", padding: 60 }}>
-                    <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+                    <div style={{ fontSize: 40, marginBottom: 16, fontWeight: 700 }}>OK</div>
                     <h3 style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>All caught up!</h3>
                     <p style={{ fontSize: 14, color: "var(--text-muted)" }}>No pending approvals at the moment</p>
                 </div>
@@ -110,7 +125,7 @@ export default function ApprovalsPage() {
                     {approvals.map(approval => (
                         <div key={approval.id} className="card" style={{ display: "flex", alignItems: "center", gap: 12 }}>
                             <span style={{ fontSize: 28 }}>
-                                {approval.type === "social" ? "📱" : approval.type === "email" ? "✉️" : "📄"}
+                                {approval.type === "social" ? "SOC" : approval.type === "email" ? "MAIL" : "DOC"}
                             </span>
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -125,8 +140,20 @@ export default function ApprovalsPage() {
                             </div>
                             <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                                 <button onClick={() => setSelectedApproval(approval)} className="btn btn-secondary btn-sm">View</button>
-                                <button onClick={() => handleAction(approval.id, "approve")} disabled={actionLoading} className="btn btn-success btn-sm">✓ Approve</button>
-                                <button onClick={() => handleAction(approval.id, "reject")} disabled={actionLoading} className="btn btn-danger btn-sm">✕ Reject</button>
+                                <button
+                                    onClick={() => handleAction(approval, "approve")}
+                                    disabled={actionLoading}
+                                    className="btn btn-success btn-sm"
+                                >
+                                    Approve
+                                </button>
+                                <button
+                                    onClick={() => handleAction(approval, "reject")}
+                                    disabled={actionLoading}
+                                    className="btn btn-danger btn-sm"
+                                >
+                                    Reject
+                                </button>
                             </div>
                         </div>
                     ))}
@@ -138,7 +165,7 @@ export default function ApprovalsPage() {
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3 style={{ fontSize: 18, fontWeight: 600 }}>{selectedApproval.title}</h3>
-                            <button onClick={() => setSelectedApproval(null)} className="btn btn-ghost btn-icon btn-sm">✕</button>
+                            <button onClick={() => setSelectedApproval(null)} className="btn btn-ghost btn-icon btn-sm">x</button>
                         </div>
                         <div className="modal-body">
                             <div style={{ marginBottom: 16 }}>
@@ -151,13 +178,46 @@ export default function ApprovalsPage() {
                             </div>
                         </div>
                         <div className="modal-footer">
-                            <button onClick={() => { handleAction(selectedApproval.id, "reject", false); }} disabled={actionLoading} className="btn btn-danger">Reject</button>
-                            <button onClick={() => { handleAction(selectedApproval.id, "approve", false); }} disabled={actionLoading} className="btn btn-secondary">Approve (Don't Send)</button>
-                            {selectedApproval.type?.includes("email") && (
-                                <button onClick={() => { handleAction(selectedApproval.id, "approve", true); }} disabled={actionLoading} className="btn btn-success">Approve & Send</button>
-                            )}
-                            {!selectedApproval.type?.includes("email") && (
-                                <button onClick={() => { handleAction(selectedApproval.id, "approve", false); }} disabled={actionLoading} className="btn btn-success">Approve</button>
+                            <button
+                                onClick={() => {
+                                    handleAction(selectedApproval, "reject", false);
+                                }}
+                                disabled={actionLoading}
+                                className="btn btn-danger"
+                            >
+                                Reject
+                            </button>
+                            {selectedApproval.type?.includes("email") ? (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            handleAction(selectedApproval, "approve", false);
+                                        }}
+                                        disabled={actionLoading}
+                                        className="btn btn-secondary"
+                                    >
+                                        Approve (Do Not Send)
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            handleAction(selectedApproval, "approve", true);
+                                        }}
+                                        disabled={actionLoading}
+                                        className="btn btn-success"
+                                    >
+                                        Approve & Send
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={() => {
+                                        handleAction(selectedApproval, "approve", false);
+                                    }}
+                                    disabled={actionLoading}
+                                    className="btn btn-success"
+                                >
+                                    Approve
+                                </button>
                             )}
                         </div>
                     </div>

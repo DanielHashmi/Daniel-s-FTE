@@ -22,9 +22,7 @@ class GmailWatcher(BaseWatcher):
         super().__init__("gmail_watcher", interval)
         self.service = None
         self.creds = None
-
-        # Load credentials safely (this logic would be extended in production)
-        self._authenticate()
+        self._auth_attempted = False
 
     def _authenticate(self):
         """Authenticate with Gmail API."""
@@ -48,7 +46,8 @@ class GmailWatcher(BaseWatcher):
                 self.creds = None
 
         # If no valid credentials, run OAuth flow
-        if not self.creds and os.path.exists(credentials_path):
+        oauth_enabled = os.getenv("GMAIL_ENABLE_OAUTH_FLOW", "false").lower() == "true"
+        if not self.creds and os.path.exists(credentials_path) and oauth_enabled:
             try:
                 self.logger.info("Starting OAuth flow for Gmail authentication...")
                 self.logger.info("NOTE: If running on WSL/Headless, follow the link in console.")
@@ -63,6 +62,11 @@ class GmailWatcher(BaseWatcher):
             except Exception as e:
                 self.logger.error(f"Failed to complete OAuth flow: {e}")
                 self.creds = None
+        elif not self.creds and os.path.exists(credentials_path) and not oauth_enabled:
+            self.logger.warning(
+                "Gmail credentials missing/expired. "
+                "Set GMAIL_ENABLE_OAUTH_FLOW=true to run the interactive OAuth flow."
+            )
 
         if self.creds:
             try:
@@ -76,6 +80,9 @@ class GmailWatcher(BaseWatcher):
 
     def check_for_updates(self):
         """Check for new unread messages with specific importance."""
+        if not self.service and not self._auth_attempted:
+            self._auth_attempted = True
+            self._authenticate()
         if not self.service:
             # Try to re-auth? Or just log warning once?
             # self.logger.warning("Gmail service not active.")

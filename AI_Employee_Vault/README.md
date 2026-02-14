@@ -20,4 +20,4 @@ This is your AI Employee's knowledge base and workspace.
 
 ---
 
-*Silver Tier - Functional Assistant*
+*Digital FTE Vault (Local-First)*

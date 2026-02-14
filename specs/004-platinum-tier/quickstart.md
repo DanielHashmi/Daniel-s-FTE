@@ -1,40 +1,81 @@
-# Platinum Tier Quickstart
+# Platinum Tier Quickstart (Local-First)
 
-## 1. Cloud VM Setup (Oracle Free Tier)
-1. Create ARM Ampere A1 instance (4 OCPU, 24GB)
-2. Install Ubuntu 22.04
-3. SSH key auth only
+This quickstart matches the repo's current primary workflow: run the dashboard + orchestrator locally and approve sensitive actions before execution.
 
-## 2. Odoo Deployment
-```
-curl -fsSL https://get.docker.com -o get-docker.com.sh
-sh get-docker.com.sh
-docker run -d -p 8069:8069 --name odoo -v odoo-data:/var/lib/odoo -e POSTGRES_PASSWORD=odoo odoo:19.0
-```
+## 1) Prerequisites
 
-## 3. Clone Repo & PM2
-```
-git clone https://github.com/DanielHashmi/Daniel-s-FTE.git ai-employee
-cd ai-employee
-npm i -g pm2
-pm2 start ecosystem.config.js
-pm2 save
-```
+- Node.js 20+
+- Python 3.12+
+- Qwen CLI available (`qwen` / `qwen.cmd`)
+- Playwright installed + Chromium downloaded
 
-## 4. Local Setup
-```
-git clone https://github.com/DanielHashmi/Daniel-s-FTE.git ai-employee-local
-cd ai-employee-local
-# Install Syncthing, point to shared vault dir
-syncthing --generate="~/.config/syncthing"
+## 2) Install Dependencies
+
+```powershell
+cd "C:\Users\kk\Desktop\Daniel's FTE"
+
+# Python deps
+python -m pip install -e .
+python -m playwright install chromium
+
+# Dashboard deps (optional: START_DASHBOARD.bat installs automatically)
+cd dashboard
+npm install
 ```
 
-## 5. Vault Sync
-- Syncthing folders: `/path/to/AI_Employee_Vault` (bidirectional)
-- Exclude: `.git`, `node_modules`, `.env`
+## 3) Configure `.env`
 
-## 6. Test Handover
-1. Kill local agent
-2. Send test email
-3. Verify cloud draft in /Pending_Approval
-4. Restart local, approve, verify execution
+Create/update `.env` in the repo root:
+
+```bash
+DRY_RUN=true
+REASONING_ENGINE=qwen
+QWEN_PATH=qwen
+
+DASHBOARD_PASSWORD=change-me
+SESSION_SECRET=change-me-too
+
+FACEBOOK_COMPOSER_URL=https://www.facebook.com/<your-profile-or-page-composer-url>
+FACEBOOK_SESSION_DIR=facebook_session
+FACEBOOK_HEADLESS=false
+FACEBOOK_LOGIN_WAIT_SECONDS=600
+FACEBOOK_KEEP_OPEN_SECONDS=0
+```
+
+## 4) Start Services
+
+Terminal 1:
+```powershell
+START_DASHBOARD.bat
+```
+
+Terminal 2:
+```powershell
+START_BRAIN.bat
+```
+
+Open `http://localhost:3000` and log in.
+
+## 5) One-Time Facebook Login Session
+
+```powershell
+python src/social/facebook_qwen_poster.py --mode login
+```
+
+Log in in the opened browser window, then press Enter in the terminal.
+
+## 6) Create + Approve + Post
+
+1. Create a Facebook post in the dashboard Social UI (generate with Qwen if desired).
+2. Queue for approval (creates a file in `AI_Employee_Vault/Pending_Approval/`).
+3. Approve in the dashboard (moves the file to `AI_Employee_Vault/Approved/`).
+4. Orchestrator posts the approved content and moves the file to `AI_Employee_Vault/Done/`.
+
+## Optional: Start Odoo
+
+```powershell
+START_ODOO.bat
+```
+
+See `docs/guides/odoo-integration-guide.md`.
+

@@ -108,6 +108,10 @@ AI_Employee_Vault/Ralph_History/
 AI_Employee_Vault/Recovery_Queue/
 AI_Employee_Vault/Alerts/
 .claude/state/
+AI_Employee_Vault/Signals/
+AI_Employee_Vault/Banking/
+AI_Employee_Vault/.fte_status
+AI_Employee_Vault/temp_email_send.json
 
 # Keep the folder structure with .gitkeep files
 !AI_Employee_Vault/Inbox/.gitkeep
@@ -144,3 +148,9 @@ AI_Employee_Vault/.obsidian/workspace-mobile.json
 # MCP servers (external/runtime)
 mcp-servers/node_modules/
 mcp-servers/*.lock
+
+# Browser automation session data (sensitive)
+linkedin_session/
+whatsapp_session/
+facebook_session/
+Microsoft/

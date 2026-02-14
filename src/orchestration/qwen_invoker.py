@@ -2,7 +2,7 @@
 Qwen Invoker Module.
 
 Invokes Qwen CLI as the primary reasoning engine.
-Uses: qwen -p "prompt" -y
+Uses: qwen -y --input-format text (prompt passed via stdin)
 """
 
 import subprocess
@@ -16,7 +16,7 @@ from src.lib.logging import get_logger
 class QwenInvoker:
     """
     Invokes Qwen CLI to generate intelligent plans.
-    Uses the command: qwen -p "prompt" -y
+    Uses: qwen -y --input-format text (prompt passed via stdin)
     """
 
     def __init__(

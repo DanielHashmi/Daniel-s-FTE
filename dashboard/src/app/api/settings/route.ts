@@ -8,7 +8,12 @@ const ENV_PATH = path.join(PROJECT_ROOT, ".env");
 export async function GET() {
     try {
         const envContent = await fs.readFile(ENV_PATH, "utf-8");
-        const settings: any = {
+        const settings: {
+            dryRun: boolean;
+            hitl: boolean;
+            gmailInterval: number;
+            socialInterval: number;
+        } = {
             dryRun: false,
             hitl: true,
             gmailInterval: 60,
@@ -55,6 +60,18 @@ export async function GET() {
                 }
             }
 
+            if (key.includes("FACEBOOK") && value && value.length > 5) {
+                if (!integrations.find(i => i.id === "facebook")) {
+                    integrations.push({
+                        id: "facebook",
+                        name: "Facebook",
+                        icon: "FB",
+                        connected: true,
+                        envKey: "FACEBOOK_COMPOSER_URL"
+                    });
+                }
+            }
+
             if (key.includes("ODOO") && value && value.length > 5) {
                 if (!integrations.find(i => i.id === "odoo")) {
                     integrations.push({
@@ -94,7 +111,7 @@ export async function PATCH(request: Request) {
     try {
         const updates = await request.json();
         const envContent = await fs.readFile(ENV_PATH, "utf-8");
-        let lines = envContent.split("\n");
+        const lines = envContent.split("\n");
 
         // Update specific values
         for (const [key, value] of Object.entries(updates)) {

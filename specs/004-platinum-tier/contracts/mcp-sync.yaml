@@ -1,5 +1,7 @@
 openapi: 3.0.0
 info:
+  # NOTE: Legacy contract from an earlier cloud/local sync plan.
+  # The current implementation is local-first and does not use this MCP contract.
   title: Vault Sync MCP Endpoints
   version: 1.0.0
 

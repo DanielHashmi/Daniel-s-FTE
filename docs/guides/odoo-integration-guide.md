@@ -1,86 +1,91 @@
-# Step-by-Step Odoo Integration Guide
+# Odoo Integration Guide (Optional)
 
-This guide will help you integrate Odoo 19 (Community Edition) with your AI Employee, completing the Platinum Tier financial workflow.
+This repo includes an optional Odoo accounting workflow:
+- Run Odoo locally via Docker
+- Sync posted transactions into `AI_Employee_Vault/Accounting/`
+- Require approval before posting invoices (HITL)
 
-## Current Status
-- **Codebase**: Fully prepared. Odoo MCP server and Agent Skills are implemented.
-- **Configuration**: Added default credentials to your `.env` file.
-- **Environment**: Docker is required but currently not detected in your WSL environment.
+## Prerequisites
 
----
+- Docker Desktop installed and running
+- Access Odoo on `http://localhost:8069`
 
-## Step 1: Enable Docker (Prerequisite)
-Your system needs Docker to run the Odoo database and application containers.
+## Start Odoo Locally
 
-1.  **Install Docker Desktop** on Windows.
-2.  Go to **Settings > Resources > WSL Integration**.
-3.  Enable integration for your specific Linux distro (e.g., `Ubuntu`).
-4.  Restart your terminal.
-5.  Verify by running: `docker ps`
+The simplest path on Windows is:
 
-## Step 2: Deploy Odoo
-Once Docker is ready, deploy the pre-configured Odoo stack.
-
-1.  Navigate to the cloud deployment folder:
-    ```bash
-    cd deployment/cloud
-    ```
-2.  Start the services:
-    ```bash
-    docker-compose -f docker-compose.odoo.yml up -d
-    ```
-3.  Wait for initialization (approx. 1-2 minutes). Access Odoo at `http://localhost:8069`.
-    *   **Email**: `odoo`
-    *   **Password**: `odoo_password`
-
-## Step 3: Configure Credentials
-I have already added default credentials to your `.env` file. If you changed them during setup, update them now:
-
-```bash
-# Edit .env file
-nano .env
-
-# Verify/Update these values:
-ODOO_URL=http://localhost:8069
-ODOO_DB=odoo
-ODOO_USERNAME=odoo
-ODOO_PASSWORD=odoo_password  # Or API Key if using 2FA
+```powershell
+START_ODOO.bat
 ```
 
-## Step 4: Verify Connection
-Use the built-in skill script to test the connection.
+This uses `docker-compose-odoo.yml` (Odoo 16 + Postgres). After it starts:
 
-1.  **Test Connection & Generate Report** (Draft Mode):
-    ```bash
-    python3 .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft summary
-    ```
-    *Success*: You should see a JSON output with "total_draft" count.
-    *Failure*: Check if Docker is running and credentials match.
+1. Open `http://localhost:8069`
+2. Create a database (recommended test values):
+   - Database Name: `odoo`
+   - Email: `admin`
+   - Password: `admin`
+   - Enable "Demo data" for testing
+3. Install the "Invoicing" (or Accounting) app
 
-## Step 5: Start the Odoo MCP Server
-The Odoo MCP server (`odoo-mcp.js`) allows the AI to interact with Odoo autonomously.
+Note: There is also `deployment/cloud/docker-compose.odoo.yml` (newer Odoo + backup container) if you want that layout instead.
 
-1.  **Start via PM2**:
-    ```bash
-    pm2 start ecosystem.config.js --only odoo-mcp
-    ```
-2.  **Verify Status**:
-    ```bash
-    pm2 status
-    pm2 logs odoo-mcp
-    ```
+## Configure `.env`
 
-## Step 6: Test the Autonomous Workflow
-Test the full loop from "Draft" to "Posted".
+Set these env vars in the repo root `.env` (gitignored):
 
-1.  **Create a Draft Invoice** manually in Odoo (`http://localhost:8069`) for testing.
-2.  **Ask the AI to sync**: "Sync Odoo invoices."
-3.  **Approve the Post**:
-    *   The AI will create an approval request in `AI_Employee_Vault/Pending_Approval/`.
-    *   Move the file to `Approved/` to authorize posting.
-    *   The AI will post it to Odoo (Live Mode).
+```bash
+ODOO_URL=http://localhost:8069
+ODOO_DB=odoo
+ODOO_USERNAME=admin
+ODOO_PASSWORD=admin
+
+# Optional safety switch
+DRY_RUN=true
+```
+
+The Odoo client currently uses Odoo's XML-RPC API (`/xmlrpc/2/*`).
+
+## Test The Odoo Skill (CLI)
+
+The integration is implemented in:
+- `.claude/skills/odoo-accounting/scripts/main_operation.py`
+
+Examples:
+
+```bash
+# Sync posted transactions into the vault (default mode: draft)
+python .claude/skills/odoo-accounting/scripts/main_operation.py sync
+
+# Generate a summary
+python .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft summary
+
+# Create a draft invoice report (CSV)
+python .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft draft-report
+```
+
+Synced transactions are written to:
+- `AI_Employee_Vault/Accounting/transactions/YYYY-MM/transactions.json`
+
+## Approval Flow: Posting Invoices (Live Mode)
+
+When you run a post in live mode with approvals enabled:
+
+```bash
+python .claude/skills/odoo-accounting/scripts/main_operation.py --mode live post 15
+```
+
+It creates:
+- `AI_Employee_Vault/Pending_Approval/invoice_15_approval.yaml`
+
+To execute it, move it to:
+- `AI_Employee_Vault/Approved/`
+
+If the orchestrator is running, it will detect the approved YAML and post the invoice (unless `DRY_RUN=true`).
 
 ## Troubleshooting
--   **"Docker not found"**: Ensure WSL integration is enabled in Docker Desktop.
--   **"Connection Refused"**: Ensure Odoo container is running (`docker ps`) and port 8069 is exposed.
--   **"Authentication Failed"**: Verify `ODOO_PASSWORD` in `.env`.
+
+- Docker is running but Odoo is not reachable:
+  - Confirm the containers are up (`docker ps`) and port `8069` is mapped.
+- Authentication errors:
+  - Verify `ODOO_DB`, `ODOO_USERNAME`, `ODOO_PASSWORD` match the database you created.

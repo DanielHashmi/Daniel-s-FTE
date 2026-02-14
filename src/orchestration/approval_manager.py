@@ -11,7 +11,7 @@ import subprocess
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from src.lib.logging import get_logger
 from src.lib.vault import vault
 import os
@@ -61,7 +61,136 @@ context:
 
         return filename
 
-    def process_approved(self, filepath):
+    def _extract_social_content(self, body: str) -> str:
+        """Extract post content from markdown body."""
+        lines = body.split("\n")
+        content_lines = []
+        in_content = False
+
+        for line in lines:
+            if line.startswith("## Content"):
+                in_content = True
+                continue
+            if line.startswith("##") and in_content:
+                break
+            if in_content and line.strip().lower().startswith("*this post requires approval"):
+                break
+            if in_content:
+                content_lines.append(line)
+
+        content = "\n".join(content_lines).strip()
+        if content:
+            return content
+
+        # Fallback: first non-empty non-note line
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.lower().startswith("*this post requires approval"):
+                return stripped
+        return ""
+
+    def _extract_json_payload(self, raw_output: str) -> Optional[Dict[str, Any]]:
+        """Best-effort extraction of JSON payload from subprocess output."""
+        for line in reversed(raw_output.splitlines()):
+            candidate = line.strip()
+            if candidate.startswith("{") and candidate.endswith("}"):
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    continue
+        return None
+
+    def _handle_facebook_post(self, metadata: Dict[str, Any], body: str, filepath: Path) -> bool:
+        """Handle approved Facebook social post using Qwen + Playwright."""
+        brain = str(metadata.get("brain", "qwen")).strip().lower()
+        if brain and brain != "qwen":
+            self.logger.error(
+                f"Facebook post rejected: only Qwen brain is allowed, got '{brain}' for {filepath.name}"
+            )
+            return False
+
+        prompt = str(metadata.get("qwen_prompt", "")).strip()
+        approved_content = self._extract_social_content(body)
+        if not prompt and not approved_content:
+            self.logger.error(f"Missing qwen_prompt/content for facebook post {filepath.name}")
+            return False
+
+        script_path = Path("src/social/facebook_qwen_poster.py")
+        if not script_path.exists():
+            self.logger.error(f"Facebook poster script not found: {script_path}")
+            return False
+
+        # HITL guarantee: post EXACTLY what the human approved.
+        # Only generate with Qwen when the file contains no approved content.
+        if approved_content:
+            cmd = [
+                sys.executable,
+                str(script_path),
+                "--mode",
+                "post",
+                "--content",
+                approved_content,
+                "--json",
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                str(script_path),
+                "--mode",
+                "generate-and-post",
+                "--prompt",
+                prompt,
+                "--json",
+            ]
+        if os.getenv("DRY_RUN", "false").lower() == "true":
+            cmd.append("--dry-run")
+        if os.getenv("FACEBOOK_HEADLESS", "false").lower() == "true":
+            cmd.append("--headless")
+
+        self.logger.info(f"Executing Facebook automation command for {filepath.name}")
+        process = subprocess.run(cmd, capture_output=True, text=True)
+
+        if process.returncode != 0:
+            self.logger.error(
+                f"Facebook automation failed for {filepath.name}: {process.stderr or process.stdout}"
+            )
+            return False
+
+        payload = self._extract_json_payload(process.stdout or "")
+        if payload and payload.get("success"):
+            preview = ""
+            generation = payload.get("generation", {})
+            if isinstance(generation, dict):
+                preview = str(generation.get("generated_content", ""))[:120]
+
+            self.logger.log_action(
+                action_type="facebook_post",
+                result="success",
+                target=str(filepath),
+                details={
+                    "mode": "qwen_playwright",
+                    "dry_run": os.getenv("DRY_RUN", "false").lower() == "true",
+                    "generated_preview": preview,
+                },
+            )
+            self.logger.info(f"Facebook post execution successful: {filepath.name}")
+            return True
+
+        # If JSON is not parseable but command succeeded, still record success with raw output
+        self.logger.log_action(
+            action_type="facebook_post",
+            result="success",
+            target=str(filepath),
+            details={
+                "mode": "qwen_playwright",
+                "dry_run": os.getenv("DRY_RUN", "false").lower() == "true",
+                "raw_output_preview": (process.stdout or "").strip()[:200],
+            },
+        )
+        self.logger.info(f"Facebook automation completed with non-JSON output: {filepath.name}")
+        return True
+
+    def process_approved(self, filepath) -> bool:
         """Handle logic when a file appears in Approved/"""
         try:
             # Read file to get context
@@ -71,7 +200,7 @@ context:
             parts = content.split("---")
             if len(parts) < 3:
                 self.logger.error(f"Invalid approval file format: {filepath.name}")
-                return
+                return False
 
             metadata = yaml.safe_load(parts[1])
             body = parts[2].strip()
@@ -85,25 +214,15 @@ context:
 
             # Execution logic
             action = metadata.get("action") or metadata.get("action_type")
-            platform = metadata.get("platform")
+            platform = str(metadata.get("platform", "")).strip().lower()
 
-            if action == "social_post" and platform == "twitter":
+            if action in ("social_post", "post") and platform == "facebook":
+                return self._handle_facebook_post(metadata, body, filepath)
+
+            elif action in ("social_post", "post") and platform == "twitter":
                 # Extract content from body
                 # The body has headers like ## Content
-                lines = body.split("\n")
-                content_lines = []
-                in_content = False
-                for line in lines:
-                    if line.startswith("## Content"):
-                        in_content = True
-                        continue
-                    elif line.startswith("##") and in_content:
-                        break
-                    
-                    if in_content:
-                        content_lines.append(line)
-                
-                tweet_text = "\n".join(content_lines).strip()
+                tweet_text = self._extract_social_content(body)
                 if not tweet_text:
                     tweet_text = body.split("\n")[0] # Fallback to first line
 
@@ -132,10 +251,13 @@ context:
                             check=True
                         )
                         self.logger.info(f"Tweet execution result: {result.stdout}")
+                        return True
                     except subprocess.CalledProcessError as e:
                         self.logger.error(f"Tweet execution failed: {e.stderr}")
+                        return False
                 else:
                     self.logger.error("social-mcp server not found")
+                    return False
 
             elif metadata.get('type') == 'invoice_posting' and action == 'post':
                 invoice_id = metadata.get('invoice_id')
@@ -151,10 +273,13 @@ context:
                             check=True
                         )
                         self.logger.info(f"Invoice post result: {result.stdout}")
+                        return True
                     except subprocess.CalledProcessError as e:
                         self.logger.error(f"Invoice post failed: {e.stderr}")
+                        return False
                 else:
                     self.logger.error("Missing invoice_id in approval metadata")
+                    return False
 
             # Qwen Autonomous Delegation
             elif os.getenv("REASONING_ENGINE") == "qwen":
@@ -175,19 +300,24 @@ context:
                     
                     if process.returncode == 0:
                         self.logger.info(f"Qwen execution success: {process.stdout}")
+                        return True
                     else:
                         self.logger.error(f"Qwen execution failed (exit {process.returncode}): {process.stderr}")
+                        return False
 
                 except Exception as e:
                     self.logger.error(f"Qwen execution exception: {e}")
+                    return False
 
             else:
                 self.logger.info(f"Approved action ready for execution (No automatic handler): {filepath.name}")
+                return True
 
         except Exception as e:
             self.logger.error(f"Error processing approved file {filepath}: {e}")
+            return False
 
-    def process_rejected(self, filepath):
+    def process_rejected(self, filepath) -> bool:
         """Handle logic when a file appears in Rejected/"""
         try:
             # Read file to get context
@@ -202,6 +332,8 @@ context:
 
             # Cancel the plan
             self.logger.info(f"Rejected action cancelled: {filepath.name}")
+            return True
 
         except Exception as e:
             self.logger.error(f"Error processing rejected file {filepath}: {e}")
+            return False

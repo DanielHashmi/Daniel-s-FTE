@@ -39,6 +39,7 @@ export async function GET() {
                                 content: postContent,
                                 status: folder === "Pending_Approval" ? "pending" : folder === "Approved" ? "approved" : "posted",
                                 createdAt: data.created || data.timestamp || "",
+                                brain: data.brain || "manual",
                             });
                         }
                     } catch (error) {
