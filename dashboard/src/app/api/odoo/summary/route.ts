@@ -7,6 +7,7 @@ import { promisify } from "util";
 const execAsync = promisify(exec);
 const PROJECT_ROOT = process.env.PROJECT_ROOT || path.join(process.cwd(), "..");
 const VAULT_PATH = path.join(PROJECT_ROOT, "AI_Employee_Vault");
+const PYTHON_EXE = process.env.PYTHON_EXE || "python";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -23,7 +24,7 @@ async function syncOdoo(): Promise<boolean> {
 
     try {
         const scriptPath = path.join(PROJECT_ROOT, ".claude", "skills", "odoo-accounting", "scripts", "main_operation.py");
-        await execAsync(`python "${scriptPath}" sync`, {
+        await execAsync(`${PYTHON_EXE} "${scriptPath}" --mode draft sync`, {
             cwd: PROJECT_ROOT,
             timeout: 15000 // 15 second timeout
         });

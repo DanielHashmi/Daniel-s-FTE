@@ -60,14 +60,31 @@ class LocalApprovalHandler:
             return []
 
         drafts = []
-        for f in self.pending_approval.glob("*.yaml"):
-            try:
-                with open(f, 'r') as file:
-                    content = file.read()
+        candidates = []
+        for pattern in ("*.yaml", "*.yml", "*.md"):
+            candidates.extend(self.pending_approval.rglob(pattern))
 
-                # Check if it's a cloud draft
-                if 'cloud_environment: true' in content or 'cloud_draft: true' in content:
+        for f in sorted(candidates, key=lambda p: p.name):
+            try:
+                content = f.read_text(encoding="utf-8", errors="ignore")
+
+                # Legacy yaml draft markers.
+                if "cloud_environment: true" in content or "cloud_draft: true" in content:
                     drafts.append(f)
+                    continue
+
+                # Current markdown approval format (DraftManager).
+                if f.suffix.lower() == ".md" and content.startswith("---"):
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        meta = yaml.safe_load(parts[1]) or {}
+                        if not isinstance(meta, dict):
+                            continue
+                        if (
+                            str(meta.get("agent_role") or "").strip().lower() == "cloud"
+                            or str(meta.get("type") or "").strip().lower() == "approval_request"
+                        ):
+                            drafts.append(f)
             except Exception as e:
                 print(f"Error reading {f}: {e}")
 

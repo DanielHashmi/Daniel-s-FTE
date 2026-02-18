@@ -1,259 +1,175 @@
-"""E2E tests for US1: Offline Email Handover workflow."""
+"""Integration tests for Platinum US1 offline email handover."""
 
-import pytest
-import tempfile
-import shutil
-from pathlib import Path
 from datetime import datetime
 
-from src.watchers.cloud_email_watcher import CloudEmailWatcher
-from deployment.cloud.draft_reply import DraftReplyGenerator
-from src.handlers.local_approval import LocalApprovalHandler
+from src.lib.vault import vault
+from src.orchestration.orchestrator import Orchestrator
 
 
-class TestUS1OfflineWorkflow:
-    """Test complete US1 workflow: Cloud draft → Local approval → Handover."""
-
-    @pytest.fixture
-    def setup_vault(self):
-        """Create isolated vault for each test."""
-        temp_dir = tempfile.mkdtemp()
-        vault_path = Path(temp_dir) / "AI_Employee_Vault"
-        vault_path.mkdir()
-
-        # Create standard folders
-        for folder in ["Inbox", "Needs_Action", "Pending_Approval", "Approved", "Rejected", "Logs"]:
-            (vault_path / folder).mkdir()
-
-        yield vault_path
-
-        # Cleanup
-        shutil.rmtree(temp_dir)
-
-    def test_complete_handover_workflow(self, setup_vault, monkeypatch):
-        """Test complete end-to-end handover workflow."""
-        vault = setup_vault
-
-        # Step 1: Simulate incoming email (create action file)
-        incoming_email = """---
-action_id: client_query_001
-type: email
-source: gmail
-priority: high
-timestamp: 2026-01-20T08:00:00Z
-sender: client@example.com
-subject: Urgent: Need response by EOD
----
-
-Hi,
-
-We need clarification on the Q1 proposal pricing. Can you respond today?
-
-Thanks,
-John
-"""
-        action_file = vault / "Needs_Action" / "client_query_001.yaml"
-        action_file.write_text(incoming_email)
-
-        # Step 2: Cloud watcher detects and processes (would normally run on cloud VM)
-        monkeypatch.setenv('CLOUD_AGENT_ID', 'cloud-agent-001')
-        cloud_watcher = CloudEmailWatcher(vault, check_interval=60)
-
-        # Simulate being on cloud (detects email actions)
-        items = cloud_watcher.check_for_updates()
-        assert len(items) > 0
-
-        item = items[0]
-        assert item['type'] == 'email'
-        assert item['source'] == 'cloud-agent-001'
-
-        # Step 3: Cloud watcher creates DRAFT action
-        draft_action_file = cloud_watcher.create_action_file(item)
-        assert draft_action_file.exists()
-        assert 'DRAFT_MODE' in draft_action_file.read_text()
-
-        # Step 4: Cloud generates draft email response (simulates cloud environment)
-        import yaml
-        action = yaml.safe_load(incoming_email.split('---')[1])
-        draft_gen = DraftReplyGenerator(str(vault))
-
-        context = {
-            'recipient': 'client@example.com',
-            'sender_name': 'AI Assistant'
-        }
-        draft_email_file = draft_gen.generate_draft(action, context)
-        assert draft_email_file.exists()
-        assert draft_email_file.parent == vault / "Pending_Approval"
-
-        # Step 5: Sync happens (Syncthing) - handover to local agent
-        # (In real scenario, file would sync to local machine)
-
-        # Step 6: Local agent picks up and approves
-        monkeypatch.setenv('LOCAL_AGENT_ID', 'local-agent-001')
-        local_handler = LocalApprovalHandler(vault)
-
-        # Verify draft is detected
-        drafts = local_handler.scan_pending_drafts()
-        assert len(drafts) == 1
-        assert drafts[0] == draft_email_file
-
-        # Simulate approval without sending (no email creds in test)
-        # Just verify the draft exists and can be processed
-        draft_metadata = yaml.safe_load(draft_email_file.read_text().split('---')[1])
-        assert draft_metadata['mode'] == 'DRAFT'
-        assert draft_metadata['requires_approval'] is True
-        assert draft_metadata['cloud_environment'] is True
-
-    def test_offline_mode_no_send(self, setup_vault):
-        """Test that drafts don't send in offline mode without approval."""
-        vault = setup_vault
-
-        # Create draft directly in Pending_Approval
-        draft_content = """---
-draft_id: offline_test_001
-type: email_draft
-mode: DRAFT
-recipient: test@example.com
-subject: Test Subject
-requires_approval: true
-cloud_environment: true
----
-
-Test email body
-"""
-        draft_file = vault / "Pending_Approval" / "offline_test_001.yaml"
-        draft_file.write_text(draft_content)
-
-        # Verify it's pending (not auto-sent)
-        handler = LocalApprovalHandler(vault)
-        drafts = handler.scan_pending_drafts()
-        assert draft_file in drafts
-
-        # Verify no credentials = no automatic sending
-        assert handler._has_email_credentials() is False
-
-    def test_draft_mode_flag_preserved(self, setup_vault, monkeypatch):
-        """Test that DRAFT_MODE flag is preserved through entire workflow."""
-        # Critical: Draft mode prevents accidental sending
-
-        vault = setup_vault
-        monkeypatch.setenv('CLOUD_AGENT_ID', 'cloud-agent-001')
-
-        # Create initial action
-        action = """---
-action_id: draft_flag_test
-type: urgent
-timestamp: 2026-01-20T12:00:00Z
----
-
-Urgent request for information
-"""
-        action_file = vault / "Needs_Action" / "draft_flag_test.yaml"
-        action_file.write_text(action)
-
-        # Cloud processes and creates draft
-        watcher = CloudEmailWatcher(vault)
-        items = watcher.check_for_updates()
-        assert len(items) > 0
-
-        draft_action = watcher.create_action_file(items[0])
-        content = draft_action.read_text()
-
-        # Verify multiple DRAFT indicators
-        assert 'DRAFT_MODE' in content or 'cloud_draft: true' in content
-        assert 'requires_handover: true' in content
-        assert 'HANDOVER REQUIRED' in content
-
-    def test_dual_agent_identification(self, setup_vault, monkeypatch):
-        """Test that both agents are correctly identified in workflow."""
-        vault = setup_vault
-
-        # Cloud agent setup
-        monkeypatch.setenv('CLOUD_AGENT_ID', 'cloud-agent-prod-01')
-        cloud_watcher = CloudEmailWatcher(vault)
-        assert cloud_watcher.cloud_agent_id == 'cloud-agent-prod-01'
-
-        # Local agent setup
-        monkeypatch.setenv('LOCAL_AGENT_ID', 'local-agent-dev-01')
-        local_handler = LocalApprovalHandler(vault)
-        assert local_handler.local_agent_id == 'local-agent-dev-01'
-
-    def test_rejection_path(self, setup_vault):
-        """Test draft rejection workflow."""
-        vault = setup_vault
-
-        # Create draft
-        draft_path = vault / "Pending_Approval" / "reject_me.yaml"
-        draft_path.write_text("""---
-draft_id: reject_me
-type: email_draft
-mode: DRAFT
-recipient: spam@example.com
-requires_approval: true
-cloud_environment: true
----
-
-Spam content
-""")
-
-        # Reject it
-        handler = LocalApprovalHandler(vault)
-        result = handler.reject_draft(draft_path)
-
-        assert result['action'] == 'rejected'
-        assert not draft_path.exists()
-
-        # Verify moved to Rejected
-        rejected_files = list((vault / "Rejected").glob("*.yaml"))
-        assert len(rejected_files) == 1
-        assert 'reject_me' in rejected_files[0].name
-
-    def test_audit_logging(self, setup_vault):
-        """Test that approval/rejection actions are logged."""
-        vault = setup_vault
-
-        handler = LocalApprovalHandler(vault)
-
-        # Create and reject a draft
-        draft_path = vault / "Pending_Approval" / "audit_test.yaml"
-        draft_path.write_text("""---
-draft_id: audit_test
-type: email_draft
-mode: DRAFT
-recipient: test@example.com
-subject: Test
-requires_approval: true
-cloud_environment: true
----
-Test body
-""")
-
-        handler.reject_draft(draft_path)
-
-        # Check log was created
-        log_files = list((vault / "Logs").glob("approval_*.json"))
-        assert len(log_files) > 0
-
-        # Verify log content
-        log_content = log_files[0].read_text()
-        assert 'draft_rejected' in log_content
-        assert 'local-agent-001' in log_content
+class _FakeMcpResult:
+    ok = True
+    raw = {"result": {"content": [{"type": "text", "text": "ok"}]}}
+    stdout = ""
+    stderr = ""
+    content_text = "ok"
 
 
-def test_us1_mvp_requirements():
-    """Test that US1 MVP requirements are met."""
-    # MVP: Cloud can create drafts, local can approve them
+class _FakeMcpErrorResult:
+    ok = False
+    is_tool_error = True
+    raw = {"result": {"content": [{"type": "text", "text": "Error: simulated failure"}], "isError": True}}
+    stdout = ""
+    stderr = ""
+    content_text = "Error: simulated failure"
 
-    # Verify cloud components exist
-    assert Path("src/watchers/cloud_email_watcher.py").exists()
-    assert Path("deployment/cloud/draft_reply.py").exists()
 
-    # Verify local components exist
-    assert Path("src/handlers/local_approval.py").exists()
+def _set_temp_vault(workspace_tmp_dir):
+    original = vault.root
+    test_root = workspace_tmp_dir / "AI_Employee_Vault"
+    vault.set_root(str(test_root))
+    vault.ensure_structure()
+    return original
 
-    # Verify draft mode indicators in code
-    watcher_content = Path("src/watchers/cloud_email_watcher.py").read_text()
-    assert 'DRAFT' in watcher_content.upper() or 'draft' in watcher_content
 
-    handler_content = Path("src/handlers/local_approval.py").read_text()
-    assert 'approve' in handler_content.lower()
+def test_cloud_offline_cycle_creates_email_draft(workspace_tmp_dir, monkeypatch):
+    original_root = _set_temp_vault(workspace_tmp_dir)
+    try:
+        action_id = "act_us1_cloud_email"
+        content = (
+            "---\n"
+            f"id: \"{action_id}\"\n"
+            "type: \"email\"\n"
+            "source: \"gmail_watcher\"\n"
+            "domain: \"personal\"\n"
+            "priority: \"high\"\n"
+            "timestamp: \"2026-02-15T00:00:00Z\"\n"
+            "status: \"pending\"\n"
+            "metadata:\n"
+            "  sender: \"client@example.com\"\n"
+            "  subject: \"Need response\"\n"
+            "---\n\n"
+            "Please send the updated details.\n"
+        )
+        vault.write_action(f"EMAIL_{action_id}.md", content, domain="personal")
+
+        monkeypatch.setenv("AGENT_ROLE", "cloud")
+        monkeypatch.setenv("AGENT_ID", "cloud-test-001")
+        monkeypatch.setenv("STRICT_WORK_ZONES", "true")
+        monkeypatch.setenv("WATCHER_GMAIL_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_LINKEDIN_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_ODOO_ENABLED", "false")
+
+        orch = Orchestrator()
+        orch.running = True
+        orch.run_cycle()
+
+        pending = vault.list_files_recursive("pending_approval", "*.md")
+        assert pending, "Cloud role should create pending approval drafts for email actions"
+        assert any(action_id in p.name for p in pending)
+    finally:
+        vault.set_root(str(original_root))
+        vault.ensure_structure()
+
+
+def test_local_executes_approved_email_and_moves_to_done(workspace_tmp_dir, monkeypatch):
+    original_root = _set_temp_vault(workspace_tmp_dir)
+    called = {}
+
+    def fake_call_node_mcp_tool(entrypoint, tool_name, arguments, timeout_seconds, env):
+        called["tool_name"] = tool_name
+        called["arguments"] = arguments
+        return _FakeMcpResult()
+
+    monkeypatch.setattr(
+        "src.orchestration.approval_manager.call_node_mcp_tool",
+        fake_call_node_mcp_tool,
+    )
+
+    try:
+        approved_file = vault.dirs["approved"] / "1700000000_EMAIL_demo.md"
+        approved_file.write_text(
+            "---\n"
+            "type: approval_request\n"
+            "action: send_email\n"
+            "to: client@example.com\n"
+            "subject: \"Re: Need response\"\n"
+            "domain: personal\n"
+            "---\n\n"
+            "# Email Draft\n\n"
+            "## Content\n"
+            "Approved response body.\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("AGENT_ROLE", "local")
+        monkeypatch.setenv("AGENT_ID", "local-test-001")
+        monkeypatch.setenv("STRICT_WORK_ZONES", "true")
+        monkeypatch.setenv("WATCHER_WHATSAPP_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_BANKING_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_FILESYSTEM_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_ODOO_ENABLED", "false")
+
+        orch = Orchestrator()
+        orch.running = True
+        orch.run_cycle()
+
+        done_files = vault.list_files_recursive("done", "*.md")
+        assert any(p.name == approved_file.name for p in done_files)
+        assert called.get("tool_name") == "send_email"
+        assert called.get("arguments", {}).get("text") == "Approved response body."
+
+        log_file = vault.dirs["logs"] / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+        assert log_file.exists()
+        assert "send_email" in log_file.read_text(encoding="utf-8", errors="ignore")
+    finally:
+        vault.set_root(str(original_root))
+        vault.ensure_structure()
+
+
+def test_local_failed_approved_action_moves_to_recovery_queue(workspace_tmp_dir, monkeypatch):
+    original_root = _set_temp_vault(workspace_tmp_dir)
+
+    def fake_call_node_mcp_tool(entrypoint, tool_name, arguments, timeout_seconds, env):
+        return _FakeMcpErrorResult()
+
+    monkeypatch.setattr(
+        "src.orchestration.approval_manager.call_node_mcp_tool",
+        fake_call_node_mcp_tool,
+    )
+
+    try:
+        approved_dir = vault.get_domain_dir("approved", "business")
+        approved_dir.mkdir(parents=True, exist_ok=True)
+        approved_file = approved_dir / "1700000001_SOCIAL_facebook_demo.md"
+        approved_file.write_text(
+            "---\n"
+            "type: approval_request\n"
+            "action: social_post\n"
+            "platform: facebook\n"
+            "domain: business\n"
+            "---\n\n"
+            "# Social Post Approval Request (facebook)\n\n"
+            "## Content\n"
+            "This should not retry endlessly.\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("AGENT_ROLE", "local")
+        monkeypatch.setenv("AGENT_ID", "local-test-001")
+        monkeypatch.setenv("STRICT_WORK_ZONES", "true")
+        monkeypatch.setenv("APPROVED_RETRY_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_WHATSAPP_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_BANKING_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_FILESYSTEM_ENABLED", "false")
+        monkeypatch.setenv("WATCHER_ODOO_ENABLED", "false")
+
+        orch = Orchestrator()
+        orch.running = True
+        orch.run_cycle()
+
+        assert not approved_file.exists(), "Failed approved item should not remain in Approved/"
+        recovery_files = vault.list_files_recursive("recovery_queue", "*.md")
+        assert any("1700000001_SOCIAL_facebook_demo" in p.name for p in recovery_files)
+    finally:
+        vault.set_root(str(original_root))
+        vault.ensure_structure()

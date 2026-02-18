@@ -1,81 +1,61 @@
-# Platinum Tier Quickstart (Local-First)
+# Platinum Tier Quickstart (Cloud + Local)
 
-This quickstart matches the repo's current primary workflow: run the dashboard + orchestrator locally and approve sensitive actions before execution.
+This quickstart follows the Hackathon 0 Platinum split:
+- Cloud drafts
+- Local approves and executes
 
 ## 1) Prerequisites
 
 - Node.js 20+
 - Python 3.12+
-- Qwen CLI available (`qwen` / `qwen.cmd`)
-- Playwright installed + Chromium downloaded
+- Qwen CLI (`qwen` / `qwen.cmd`)
+- Playwright Chromium (for browser-session flows)
 
 ## 2) Install Dependencies
 
 ```powershell
 cd "C:\Users\kk\Desktop\Daniel's FTE"
-
-# Python deps
 python -m pip install -e .
 python -m playwright install chromium
-
-# Dashboard deps (optional: START_DASHBOARD.bat installs automatically)
 cd dashboard
 npm install
 ```
 
 ## 3) Configure `.env`
 
-Create/update `.env` in the repo root:
+Start from `.env.example` and set at least:
 
 ```bash
 DRY_RUN=true
 REASONING_ENGINE=qwen
-QWEN_PATH=qwen
-
-DASHBOARD_PASSWORD=change-me
-SESSION_SECRET=change-me-too
-
-FACEBOOK_COMPOSER_URL=https://www.facebook.com/<your-profile-or-page-composer-url>
-FACEBOOK_SESSION_DIR=facebook_session
-FACEBOOK_HEADLESS=false
-FACEBOOK_LOGIN_WAIT_SECONDS=600
-FACEBOOK_KEEP_OPEN_SECONDS=0
+AGENT_ROLE=local
+AGENT_ID=local-agent-001
+STRICT_WORK_ZONES=true
 ```
 
-## 4) Start Services
+## 4) Start Local Surfaces
 
-Terminal 1:
 ```powershell
 START_DASHBOARD.bat
+START_BRAIN_LOCAL.bat
 ```
 
-Terminal 2:
-```powershell
-START_BRAIN.bat
-```
-
-Open `http://localhost:3000` and log in.
-
-## 5) One-Time Facebook Login Session
+## 5) Start Cloud Drafter (dev host or VM)
 
 ```powershell
-python src/social/facebook_qwen_poster.py --mode login
+START_BRAIN_CLOUD.bat
 ```
 
-Log in in the opened browser window, then press Enter in the terminal.
-
-## 6) Create + Approve + Post
-
-1. Create a Facebook post in the dashboard Social UI (generate with Qwen if desired).
-2. Queue for approval (creates a file in `AI_Employee_Vault/Pending_Approval/`).
-3. Approve in the dashboard (moves the file to `AI_Employee_Vault/Approved/`).
-4. Orchestrator posts the approved content and moves the file to `AI_Employee_Vault/Done/`.
-
-## Optional: Start Odoo
+## 6) Run Platinum Gate
 
 ```powershell
-START_ODOO.bat
+RUN_PLATINUM_DEMO_GATE.bat
 ```
 
-See `docs/guides/odoo-integration-guide.md`.
+Expected: cloud draft -> local approve -> MCP execute -> logs -> `Done/`.
 
+## 7) Optional Cloud Odoo Deployment
+
+Use:
+- `deployment/cloud/README.md`
+- `deployment/cloud/docker-compose.odoo.yml`

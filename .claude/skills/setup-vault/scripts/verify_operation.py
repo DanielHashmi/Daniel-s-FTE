@@ -1,76 +1,75 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
+"""setup-vault verification
+
+Validate required Bronze->Platinum vault structure.
 """
-Setup Vault - Verification
-Validates vault structure was created correctly.
-"""
+
+from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 
+REQUIRED_DIRS = [
+    "Inbox",
+    "Needs_Action",
+    "In_Progress",
+    "Plans",
+    "Done",
+    "Logs",
+    "Pending_Approval",
+    "Approved",
+    "Rejected",
+    "Signals",
+    "Accounting",
+    "Briefings",
+    "Recovery_Queue",
+    "Quarantine",
+    "Alerts",
+    "Ralph_State",
+    "Ralph_History",
+    "Config",
+    "Banking",
+]
 
-def verify_vault(vault_path: Path) -> bool:
-    """Verify vault structure and files exist."""
+REQUIRED_FILES = [
+    "Dashboard.md",
+    "Company_Handbook.md",
+    "Business_Goals.md",
+    "README.md",
+]
 
-    # Check vault directory exists
+
+def verify(vault_path: Path) -> bool:
     if not vault_path.exists():
-        print(f"✗ Vault directory not found: {vault_path}")
+        print(f"Missing vault directory: {vault_path}")
         return False
 
-    # Check required folders
-    required_folders = [
-        "Inbox",
-        "Needs_Action",
-        "Done",
-        "Plans",
-        "Logs",
-        "Pending_Approval",
-        "Approved",
-        "Rejected"
-    ]
+    missing_dirs = [d for d in REQUIRED_DIRS if not (vault_path / d).exists()]
+    missing_files = [f for f in REQUIRED_FILES if not (vault_path / f).exists()]
 
-    missing_folders = []
-    for folder in required_folders:
-        if not (vault_path / folder).exists():
-            missing_folders.append(folder)
-
-    if missing_folders:
-        print(f"✗ Missing folders: {', '.join(missing_folders)}")
-        return False
-
-    # Check required files
-    required_files = [
-        "Dashboard.md",
-        "Company_Handbook.md",
-        "README.md",
-        ".gitignore"
-    ]
-
-    missing_files = []
-    for file in required_files:
-        if not (vault_path / file).exists():
-            missing_files.append(file)
-
+    if missing_dirs:
+        print("Missing directories:")
+        for item in missing_dirs:
+            print(f"- {item}")
     if missing_files:
-        print(f"✗ Missing files: {', '.join(missing_files)}")
-        return False
+        print("Missing files:")
+        for item in missing_files:
+            print(f"- {item}")
 
-    return True
+    ok = not missing_dirs and not missing_files
+    if ok:
+        print("Vault verification passed")
+    return ok
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Verify AI Employee Vault structure")
-    parser.add_argument("--vault-path", default="AI_Employee_Vault", help="Vault path")
-
+    parser.add_argument("--vault-path", default="AI_Employee_Vault")
     args = parser.parse_args()
-    vault_path = Path(args.vault_path)
 
-    if verify_vault(vault_path):
-        print("✓ Verification passed - vault structure complete")
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    return 0 if verify(Path(args.vault_path)) else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

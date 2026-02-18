@@ -16,31 +16,31 @@ description: "WHAT: Sync transactions, invoices, and financial data from Odoo ac
 
 1. **Sync Transactions** (retrieves last 30 days):
    ```bash
-   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --action sync
+   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft sync
    ```
    *Syncs invoices, payments, expenses from Odoo. Prevents duplicates.*
 
 2. **Financial Summary**:
    ```bash
-   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --action summary --period monthly
+   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft summary --limit 100
    ```
-   *Options: `--period daily|weekly|monthly|custom --start YYYY-MM-DD --end YYYY-MM-DD`*
+   *Use `--limit` to control returned invoice rows.*
 
 3. **List Invoices**:
    ```bash
-   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --action invoices --status unpaid
+   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft summary
    ```
-   *Options: `--status all|paid|unpaid|overdue`*
+   *Returns draft-invoice summary suitable for cloud review.*
 
-4. **Expense Analysis**:
+4. **Validate Invoice**:
    ```bash
-   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --action expenses --top 10
+   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --mode draft validate 15
    ```
-   *Categorizes expenses and shows top spending areas.*
+   *Validates invoice fields before posting.*
 
-5. **Check Status**:
+5. **Post Invoice (Live Mode, HITL by default)**:
    ```bash
-   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --action status
+   python3 .claude/skills/odoo-accounting/scripts/main_operation.py --mode live post 15
    ```
 
 6. **Verify Connection**:
@@ -52,7 +52,7 @@ description: "WHAT: Sync transactions, invoices, and financial data from Odoo ac
 ```bash
 ODOO_URL=http://localhost:8069
 ODOO_DB=your_database_name
-ODOO_USER=your_user_login
+ODOO_USERNAME=your_user_login
 ODOO_PASSWORD=your_api_key_or_password
 # API key allows secure access without main password
 ```

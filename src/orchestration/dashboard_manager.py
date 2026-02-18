@@ -19,6 +19,7 @@ class DashboardManager:
                      watchers_status: Dict[str, str],
                      pending_count: int,
                      recent_activity: List[str],
+                     signals: List[str] = None,
                      errors: List[str] = None):
         """
         Update the dashboard with current system status.
@@ -56,6 +57,14 @@ class DashboardManager:
                     content += f"- {activity}\n"
             else:
                 content += "No recent activity.\n"
+
+            # Cloud-to-local signals (Platinum)
+            content += "\n## Signals\n\n"
+            if signals:
+                for sig in signals[-10:]:
+                    content += f"- {sig}\n"
+            else:
+                content += "No pending signals.\n"
 
             # Errors
             content += "\n## Errors\n\n"

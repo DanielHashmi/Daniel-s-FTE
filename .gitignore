@@ -72,6 +72,8 @@ AI_Employee_Vault/Logs/*.json
 # Credentials (Gmail OAuth)
 credentials.json
 token.json
+gmail_token.json
+*_token.json
 *.key
 *.secret
 
@@ -154,3 +156,19 @@ linkedin_session/
 whatsapp_session/
 facebook_session/
 Microsoft/
+
+# Additional local runtime/session artifacts
+instagram_session/
+instagram_session_corrupt_*/
+.pytest_temp/
+.test_runtime/
+.tmp_test/
+runtime-logs/
+pytest-cache-files-*/
+orchestrator_runtime.log
+orchestrator_runtime.out.log
+dashboard_runtime.log
+
+# Local downloaded/scratch docs
+meta_access_tokens.html
+ig_get_started_fb_login.html

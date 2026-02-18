@@ -46,6 +46,100 @@ def _resolve_qwen_path() -> str:
     return configured
 
 
+def _detect_windows_default_chromium_channel() -> Optional[str]:
+    if os.name != "nt":
+        return None
+
+    def _channel_from_text(raw: str) -> Optional[str]:
+        lowered = (raw or "").strip().lower()
+        if "msedge.exe" in lowered or "microsoft\\edge" in lowered or "edge" in lowered:
+            return "msedge"
+        if "chrome.exe" in lowered or "google\\chrome" in lowered or "chrome" in lowered:
+            return "chrome"
+        return None
+
+    try:
+        import winreg
+
+        # Preferred lookup: per-user protocol association.
+        for protocol in ("https", "http"):
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    rf"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{protocol}\UserChoice",
+                ) as key:
+                    prog_id, _ = winreg.QueryValueEx(key, "ProgId")
+                channel = _channel_from_text(str(prog_id))
+                if channel:
+                    return channel
+            except Exception:
+                continue
+
+        # Fallback lookup: shell open command resolution.
+        for protocol in ("https", "http"):
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_CLASSES_ROOT,
+                    rf"{protocol}\shell\open\command",
+                ) as key:
+                    command, _ = winreg.QueryValueEx(key, "")
+                channel = _channel_from_text(str(command))
+                if channel:
+                    return channel
+            except Exception:
+                continue
+    except Exception:
+        return None
+
+    return None
+
+
+def _resolve_browser_channel(env_key: str) -> tuple[Optional[str], bool]:
+    """
+    Resolve Playwright channel.
+    Returns (channel, strict):
+    - strict=True means user explicitly set a channel and launch should fail if unavailable.
+    - strict=False means channel is auto-selected and may fallback to bundled Chromium.
+    """
+    raw = os.getenv(env_key, "").strip()
+    lowered = raw.lower()
+
+    if raw:
+        if lowered in {"none", "bundled", "chromium"}:
+            return None, True
+        if lowered != "default":
+            return raw, True
+
+    detected = _detect_windows_default_chromium_channel()
+    if detected:
+        return detected, False
+
+    return None, False
+
+
+def _launch_chromium_context(
+    playwright: Any,
+    launch_kwargs: Dict[str, Any],
+    channel: Optional[str],
+    strict_channel: bool,
+) -> tuple[Any, str]:
+    kwargs = dict(launch_kwargs)
+
+    if channel:
+        kwargs["channel"] = channel
+        try:
+            return playwright.chromium.launch_persistent_context(**kwargs), channel
+        except Exception as exc:
+            if strict_channel:
+                raise RuntimeError(
+                    f"Failed to launch browser channel '{channel}'. "
+                    f"Set {('FACEBOOK_BROWSER_CHANNEL')}=default or unset it to auto-fallback. "
+                    f"Original error: {exc}"
+                ) from exc
+
+    return playwright.chromium.launch_persistent_context(**launch_kwargs), "chromium"
+
+
 def _normalize_qwen_output(raw_output: str) -> str:
     """Clean common assistant wrappers and keep plain post text."""
     text = raw_output.strip()
@@ -163,7 +257,7 @@ def post_to_facebook_with_playwright(
         ) from exc
 
     login_wait_seconds = int(os.getenv("FACEBOOK_LOGIN_WAIT_SECONDS", "600"))
-    browser_channel = os.getenv("FACEBOOK_BROWSER_CHANNEL", "").strip() or None
+    browser_channel, strict_channel = _resolve_browser_channel("FACEBOOK_BROWSER_CHANNEL")
 
     def _looks_like_login_url(url: str) -> bool:
         lowered = (url or "").lower()
@@ -197,10 +291,12 @@ def post_to_facebook_with_playwright(
             "locale": "en-US",
             "viewport": {"width": 1280, "height": 900},
         }
-        if browser_channel:
-            launch_kwargs["channel"] = browser_channel
-
-        context = p.chromium.launch_persistent_context(**launch_kwargs)
+        context, active_channel = _launch_chromium_context(
+            p,
+            launch_kwargs,
+            browser_channel,
+            strict_channel,
+        )
         # Always open a new tab in the persistent browser context for each post attempt.
         page = context.new_page()
         if not headless:
@@ -338,6 +434,7 @@ def post_to_facebook_with_playwright(
                 "dry_run": False,
                 "message": "Facebook post submitted via Playwright.",
                 "composer_url": composer_url,
+                "browser_channel": active_channel,
                 "keep_open_seconds": keep_open_seconds,
             }
         finally:
@@ -386,17 +483,19 @@ def prepare_facebook_session() -> Dict[str, Any]:
         ) from exc
 
     with sync_playwright() as p:
-        browser_channel = os.getenv("FACEBOOK_BROWSER_CHANNEL", "").strip() or None
+        browser_channel, strict_channel = _resolve_browser_channel("FACEBOOK_BROWSER_CHANNEL")
         launch_kwargs: Dict[str, Any] = {
             "user_data_dir": str(session_dir),
             "headless": False,
             "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
             "viewport": {"width": 1280, "height": 900},
         }
-        if browser_channel:
-            launch_kwargs["channel"] = browser_channel
-
-        context = p.chromium.launch_persistent_context(**launch_kwargs)
+        context, active_channel = _launch_chromium_context(
+            p,
+            launch_kwargs,
+            browser_channel,
+            strict_channel,
+        )
         page = context.pages[0] if context.pages else context.new_page()
         page.goto(composer_url, wait_until="domcontentloaded", timeout=60000)
         print(
@@ -409,6 +508,7 @@ def prepare_facebook_session() -> Dict[str, Any]:
     return {
         "success": True,
         "session_dir": str(session_dir),
+        "browser_channel": active_channel,
         "message": "Facebook session captured.",
     }
 

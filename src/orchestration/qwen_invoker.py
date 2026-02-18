@@ -89,36 +89,52 @@ class QwenInvoker:
             return None
 
         # Extract metadata
-        action_type = action_metadata.get("type", "unknown")
-        source = action_metadata.get("source", "unknown")
-        action_id = action_metadata.get("id", "unknown")
+        action_type = str(action_metadata.get("type", "unknown"))
+        source = str(action_metadata.get("source", "unknown"))
+        action_id = str(action_metadata.get("id", "unknown"))
+        domain = str(action_metadata.get("domain") or "").strip().lower() or "general"
+        priority = str(action_metadata.get("priority") or "normal").strip().lower()
+
+        handbook = self._load_context()
+        # Heuristic hint for HITL: any external side effect should require approval.
+        lower = (action_content or "").lower()
+        requires_approval_hint = any(
+            kw in lower
+            for kw in ("send", "post", "publish", "pay", "payment", "transfer", "invoice", "delete", "dm")
+        ) or action_type in {"email", "social", "finance", "payment", "invoice", "message"}
 
         # Strict prompt with clear instructions - passed via stdin to avoid escaping issues
-        prompt = f"""You are an AI planning assistant. Your ONLY job is to output a valid Markdown execution plan.
-NO conversation. NO questions. NO "I'd be happy to help". Just output the plan directly.
+        prompt = f"""You are an autonomous employee planning engine.
+Output ONLY a Markdown plan that starts with YAML frontmatter (--- ... ---).
+No conversation, no code fences, no extra commentary.
 
-ACTION TO PROCESS:
+COMPANY HANDBOOK (authoritative rules; may be truncated):
+{handbook}
+
+ACTION TO PROCESS (from the vault):
 {action_content}
 
-OUTPUT THE FOLLOWING MARKDOWN EXACTLY (fill in the bracketed sections):
----
-action_id: "{action_id}"
-type: "{action_type}"
-status: "pending"
----
+REQUIRED FRONTMATTER KEYS (use these exact names):
+- plan_id: "PLAN_{action_id}"
+- action_id: "{action_id}"
+- action_type: "{action_type}"
+- source: "{source}"
+- domain: "{domain}"
+- created: "<ISO-8601 UTC timestamp>"
+- status: one of ["draft","pending","pending_approval","completed","error"]
+- priority: one of ["high","normal","low"]
+- requires_approval: true|false
+- engine: "qwen"
 
-# Plan
+RULES:
+- requires_approval MUST be true for any external side-effect (send/post/pay/delete/move outside vault).
+- Heuristic hint: requires_approval should be {str(requires_approval_hint).lower()}.
+- If information is missing, add a step to request human input rather than inventing facts.
 
-## Objective
-[Write 1-2 sentences describing what needs to be done based on the action above]
-
-## Steps
-- [ ] 1. [First step]
-- [ ] 2. [Second step]
-- [ ] 3. **[APPROVAL REQUIRED]** [Action requiring human approval if any]
-
-## Notes
-[Any relevant context or considerations]
+BODY FORMAT (must include these headings):
+# Objective
+# Steps (checkbox list)
+# Notes
 
 BEGIN OUTPUT NOW:"""
 

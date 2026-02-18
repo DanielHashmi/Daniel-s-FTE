@@ -8,7 +8,7 @@ from src.lib.logging import get_logger
 
 class OdooWatcher(BaseWatcher):
     def __init__(self, interval: int = 60):
-        super().__init__("odoo_watcher", interval)
+        super().__init__("odoo_watcher", interval, domain=os.getenv("ODOO_DOMAIN", "business"))
         self.logger = get_logger("odoo_watcher")
         self.script_path = os.path.join(os.getcwd(), ".claude", "skills", "odoo-accounting", "scripts", "main_operation.py")
 

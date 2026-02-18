@@ -1,61 +1,55 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import fs from "fs/promises";
-import path from "path";
 import matter from "gray-matter";
+import {
+  encodeFileIdFromRelative,
+  listMarkdownFilesRecursive,
+  normalizeVaultRelative,
+} from "@/lib/vault";
 
-const PROJECT_ROOT = process.env.PROJECT_ROOT || path.join(process.cwd(), "..");
-const VAULT_PATH = path.join(PROJECT_ROOT, "AI_Employee_Vault");
-
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-    try {
-        const pendingPath = path.join(VAULT_PATH, "Pending_Approval");
+  try {
+    const files = await listMarkdownFilesRecursive("Pending_Approval");
+    const approvals = [];
 
-        let files: string[] = [];
-        try {
-            files = await fs.readdir(pendingPath);
-        } catch (error) {
-            console.error("Error reading Pending_Approval folder:", error);
-            return NextResponse.json({ approvals: [] });
-        }
+    for (const filePath of files) {
+      try {
+        const content = await fs.readFile(filePath, "utf-8");
+        const { data, content: body } = matter(content);
+        const rel = normalizeVaultRelative(filePath); // Pending_Approval/.../*.md
+        const relFromPending = rel.replace(/^Pending_Approval\//, "");
+        const domain = relFromPending.includes("/") ? relFromPending.split("/")[0] : "general";
 
-        const approvals = [];
-
-        for (const file of files) {
-            if (!file.endsWith(".md")) continue;
-
-            try {
-                const filePath = path.join(pendingPath, file);
-                const content = await fs.readFile(filePath, "utf-8");
-                const { data, content: body } = matter(content);
-
-                approvals.push({
-                    id: file.replace(".md", ""),
-                    title: data.subject || data.title || file.replace(".md", "").replace(/_/g, " "),
-                    type: data.type || "unknown",
-                    content: body.trim(),
-                    priority: data.priority || "normal",
-                    timestamp: data.created || data.timestamp || new Date().toISOString(),
-                    action: data.action || "",
-                    platform: data.platform || "",
-                });
-            } catch (error) {
-                console.error(`Error processing file ${file}:`, error);
-            }
-        }
-
-        return NextResponse.json(
-            { approvals, _timestamp: Date.now() },
-            {
-                headers: {
-                    'Cache-Control': 'no-store, no-cache, must-revalidate',
-                    'Pragma': 'no-cache',
-                }
-            }
-        );
-    } catch (error) {
-        console.error("Error getting approvals:", error);
-        return NextResponse.json({ approvals: [] }, { status: 500 });
+        approvals.push({
+          id: encodeFileIdFromRelative(relFromPending),
+          title: data.subject || data.title || relFromPending.replace(/\.md$/i, "").replace(/_/g, " "),
+          type: data.type || "unknown",
+          content: body.trim(),
+          priority: data.priority || "normal",
+          timestamp: data.created || data.timestamp || new Date().toISOString(),
+          action: data.action || data.action_type || "",
+          platform: data.platform || "",
+          domain,
+          path: rel,
+        });
+      } catch (error) {
+        console.error(`Error processing approval file ${filePath}:`, error);
+      }
     }
+
+    return NextResponse.json(
+      { approvals, _timestamp: Date.now() },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("Error getting approvals:", error);
+    return NextResponse.json({ approvals: [] }, { status: 500 });
+  }
 }

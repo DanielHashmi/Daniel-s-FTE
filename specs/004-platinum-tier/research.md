@@ -1,6 +1,6 @@
 # Platinum Tier Research Notes (Current Implementation)
 
-## Local-First Control Plane
+## Local-First Control Plane (Synced Across Cloud + Local)
 
 Decision: use `AI_Employee_Vault/` as the single source of truth for state.
 
@@ -8,6 +8,15 @@ Rationale:
 - Auditable: approvals and outcomes are files
 - Simple HITL: "approve by move" works without external services
 - Works offline and across tools (UI, scripts, Obsidian)
+
+## Cloud/Local Work-Zone Specialization
+
+Decision: enforce role ownership with `AGENT_ROLE` and `STRICT_WORK_ZONES=true`.
+
+Rationale:
+- Prevents local agent from claiming cloud-owned drafting tasks
+- Prevents cloud agent from drifting into local-only sensitive execution paths
+- Keeps Platinum handover deterministic for demo and production-ish flows
 
 ## Qwen Invocation Strategy
 
@@ -41,4 +50,3 @@ Decision: write a heartbeat file (`AI_Employee_Vault/Logs/orchestrator_heartbeat
 Rationale:
 - Dashboard can display a reliable "brain running" indicator without needing sockets/services
 - Avoids false negatives during long cycles by using a dedicated heartbeat loop
-

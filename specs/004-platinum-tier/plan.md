@@ -1,91 +1,86 @@
-# Implementation Plan: Platinum Tier (Local-First Dashboard + Brain)
+# Implementation Plan: Platinum Tier (Hackathon 0)
 
-**Date**: 2026-02-14  
+**Date**: 2026-02-15  
 **Spec**: [spec.md](spec.md)
 
 ## Summary
 
-This repo's "Platinum Tier" implementation is centered on a single-machine, local-first loop:
-- A Next.js dashboard creates and manages approval files inside `AI_Employee_Vault/`
-- A Python orchestrator watches the vault and executes items that a human has approved
-
-Cloud VM + sync handover is not the primary path in the current implementation.
+Implement full Platinum requirements with a cloud draft agent and local executive agent sharing a vault-based workflow. All sensitive actions remain HITL-gated and execute via MCP only after local approval.
 
 ## Architecture
 
 ### Components
 
 - **Vault**: `AI_Employee_Vault/`
-  - File-based state machine: `Pending_Approval/` -> `Approved/` or `Rejected/` -> `Done/`
-- **Dashboard (UI + API)**: `dashboard/` (Next.js)
-  - Reads/writes vault files (approvals, social drafts, status)
-  - Shows orchestrator status from a heartbeat file
-- **Orchestrator ("brain")**: `src/orchestration/orchestrator.py`
-  - Runs watchers in background threads
-  - Processes approvals quickly (Approved/ and Rejected/)
-  - Writes liveness heartbeat
+  - Folder state machine with domain subfolders
+  - Claim-by-move queue using `In_Progress/<agent>/`
+- **Cloud Agent**: `AGENT_ROLE=cloud`
+  - Processes cloud-owned `Needs_Action` items
+  - Drafts approvals into `Pending_Approval/<domain>/`
+  - Writes signals for local merge
+- **Local Agent**: `AGENT_ROLE=local`
+  - Merges signals and updates dashboard
+  - Handles approvals and executes approved external actions
+- **Dashboard**: `dashboard/`
+  - Domain-aware management UI
+  - Approval operations
+  - Orchestrator heartbeat visibility
+- **MCP Layer**:
+  - `mcp-servers/email-mcp/index.js`
+  - `mcp-servers/social-mcp/index.js`
+  - `deployment/cloud/odoo-mcp.js`
+- **Cloud Odoo Stack**:
+  - `deployment/cloud/docker-compose.odoo.yml`
+  - `deployment/cloud/config/Caddyfile`
+  - `deployment/cloud/healthcheck_odoo.sh`
 
-### Process Model
+## Process Model
 
-Two local processes are expected during normal operation:
-1. `START_DASHBOARD.bat` (web UI)
-2. `START_BRAIN.bat` (orchestrator)
+### Local
+1. `START_DASHBOARD.bat`
+2. `START_BRAIN_LOCAL.bat` (or PM2 local app)
+
+### Cloud
+1. `pm2 start deployment/cloud/ecosystem.config.js`
+2. optional `docker compose --env-file .env.cloud -f deployment/cloud/docker-compose.odoo.yml up -d`
 
 ## Key Flows
 
-### Facebook: Qwen Draft -> Approval -> Playwright Post
+### Cloud Draft -> Local Approve -> MCP Execute
 
-1. Generate draft text with Qwen in the UI:
-   - API: `dashboard/src/app/api/social/facebook/generate/route.ts`
-   - Qwen spawn wrapper: `dashboard/src/lib/qwen.ts`
-   - Invocation: `qwen -y --input-format text` with prompt passed via stdin
-2. Queue a post for approval:
-   - API: `dashboard/src/app/api/social/post/route.ts`
-   - Writes a Markdown file into `AI_Employee_Vault/Pending_Approval/`
-3. Approve:
-   - Dashboard approval UI moves the file to `AI_Employee_Vault/Approved/`
-4. Execute:
-   - Orchestrator detects the approved file
-   - Execution handler: `src/orchestration/approval_manager.py`
-   - Posts the approved `## Content` via:
-     - `src/social/facebook_qwen_poster.py --mode post --content "<approved content>"`
+1. Cloud claims owned action from `Needs_Action/`.
+2. Cloud creates plan + draft in `Pending_Approval/<domain>/`.
+3. Human approves by moving to `Approved/<domain>/` (dashboard or file move).
+4. Local executes via MCP and logs action.
+5. Item and plan move to `Done/`.
 
-HITL guarantee is enforced at execution time: if a file contains approved `## Content`,
-the orchestrator posts that content exactly (no regeneration after approval).
+### Dashboard Single Writer
 
-### Orchestrator Liveness (UI Status)
+- Cloud writes markdown updates to `Signals/`.
+- Local agent merges signals during dashboard updates.
+- Only local updates `Dashboard.md`.
 
-- Orchestrator writes `AI_Employee_Vault/Logs/orchestrator_heartbeat.json`
-- Dashboard reads the heartbeat via `dashboard/src/app/api/social/accounts/route.ts`
+## Validation Strategy
+
+### Automated Gate
+
+- `scripts/platinum_demo_gate.py`
+  - simulates local offline and cloud draft cycle
+  - validates approval and execution lifecycle
+  - verifies logs and completion markers
+
+### Unit Safety
+
+- `tests/unit/test_approval_manager.py`
+  - content extraction from `## Content`
+  - exact approved content posted to MCP tool call
 
 ## Configuration
 
-Recommended `.env` keys (repo root, gitignored):
+Core runtime env keys:
 
-- `DRY_RUN=true|false`
-- `REASONING_ENGINE=qwen|claude`
-- `QWEN_PATH=qwen` (Windows often needs `qwen.cmd`)
-- `FACEBOOK_COMPOSER_URL=...`
-- `FACEBOOK_SESSION_DIR=facebook_session`
-- `FACEBOOK_HEADLESS=true|false`
-- `FACEBOOK_LOGIN_WAIT_SECONDS=600`
-- `FACEBOOK_KEEP_OPEN_SECONDS=0`
-- `FACEBOOK_BROWSER_CHANNEL=chrome` (optional)
-- `DASHBOARD_PASSWORD=...` (dashboard login)
-- `SESSION_SECRET=...` (dashboard session cookie signing)
-
-## Verification / Acceptance Checks
-
-1. Start dashboard and brain.
-2. Confirm heartbeat updates: `AI_Employee_Vault/Logs/orchestrator_heartbeat.json`
-3. Create a Facebook post in the UI and queue it for approval.
-4. Approve it and confirm:
-   - In dry-run mode: no browser opens, file moves to `Done/`.
-   - In live mode: Playwright opens a persistent browser context and submits the post.
-
-## Future Enhancements (Not Required For Current State)
-
-- Add explicit UI controls to capture social sessions (Facebook/LinkedIn/WhatsApp).
-- Strengthen the vault file schema validation (reject malformed approval files early).
-- Expand tests for the social approval execution path (unit + E2E).
-
+- `AGENT_ROLE`, `AGENT_ID`, `STRICT_WORK_ZONES`
+- `WATCHER_*_ENABLED` toggles
+- `DRY_RUN`, `DEV_MODE`, `REASONING_ENGINE`
+- `PYTHON_EXE` (optional)
+- cloud-specific values in `.env.cloud`

@@ -24,7 +24,7 @@ Ensure your Odoo Community instance has the following:
 ```bash
 export ODOO_URL="http://localhost:8069"  # Your Odoo instance URL
 export ODOO_DB="your_database_name"      # Database name
-export ODOO_USER="api_user@company.com"  # User login/email
+export ODOO_USERNAME="api_user@company.com"  # User login/email
 export ODOO_PASSWORD="your_api_key"      # Generated API key (preferred)
 ```
 
@@ -35,7 +35,7 @@ Install odoo-api-client for easier integration:
 pip install odoo-api-client
 ```
 
-Or use built-in xmlrpc.client (Python standard library).
+Use JSON-RPC over `/jsonrpc` (Odoo 19+ requirement).
 
 ## Odoo MCP Server
 
@@ -57,7 +57,7 @@ Configure in `~/.config/claude-code/mcp.json`:
       "env": {
         "ODOO_URL": "${ODOO_URL}",
         "ODOO_DB": "${ODOO_DB}",
-        "ODOO_USER": "${ODOO_USER}",
+        "ODOO_USERNAME": "${ODOO_USERNAME}",
         "ODOO_PASSWORD": "${ODOO_PASSWORD}"
       }
     }
@@ -129,7 +129,7 @@ Common Odoo account types (customize in your Odoo instance):
 
 ### Create Invoice
 ```python
-models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
+result = post_jsonrpc(f'{url}/jsonrpc', payload)
 invoice = models.execute_kw(
     db, uid, password, 'account.move', 'create',
     [{'partner_id': partner_id, 'move_type': 'out_invoice', 'invoice_line_ids': [...]}]

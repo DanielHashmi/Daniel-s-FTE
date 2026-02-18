@@ -8,17 +8,18 @@ Extracts unread counts and details.
 import time
 import hashlib
 import random
+import os
 from pathlib import Path
-from playwright.sync_api import sync_playwright
 
 from .base import BaseWatcher
+from src.lib.vault import vault
 
 class LinkedInWatcher(BaseWatcher):
     def __init__(self, interval: int = 600, headless: bool = True):
         # Safety: LinkedIn is very strict. Default interval increased to 10 mins (600s).
         # We will also add randomization to this interval in the main loop if possible,
         # but here we rely on internal sleeps.
-        super().__init__("linkedin_watcher", interval)
+        super().__init__("linkedin_watcher", interval, domain=os.getenv("LINKEDIN_DOMAIN", "business"))
         self.headless = headless
         self.session_path = Path("linkedin_session")
         self.browser = None
@@ -27,6 +28,8 @@ class LinkedInWatcher(BaseWatcher):
 
     def _setup_browser(self):
         try:
+            from playwright.sync_api import sync_playwright
+
             self.p = sync_playwright().start()
             abs_session_path = self.session_path.resolve()
             
@@ -59,6 +62,25 @@ class LinkedInWatcher(BaseWatcher):
                 
         except Exception as e:
             self.logger.error(f"LinkedIn Browser Setup Failed: {e}")
+            # Graceful degradation: alert and keep watcher alive.
+            try:
+                vault.ensure_structure()
+                alert_path = vault.dirs["alerts"] / f"{int(time.time())}_linkedin_watcher_playwright_error.md"
+                alert_path.write_text(
+                    f"# LinkedIn Watcher Error\n\n"
+                    f"Timestamp: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n\n"
+                    f"Error: {e}\n\n"
+                    "Watcher will keep running but cannot monitor LinkedIn until this is fixed.\n",
+                    encoding="utf-8",
+                )
+                self.logger.log_action(
+                    action_type="watcher_error",
+                    result="error",
+                    target=str(alert_path),
+                    details={"watcher": "linkedin", "error": str(e)[:200]},
+                )
+            except Exception:
+                pass
 
     def check_for_updates(self):
         if not self.page:

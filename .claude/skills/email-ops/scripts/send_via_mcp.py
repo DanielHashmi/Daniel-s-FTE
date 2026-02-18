@@ -34,7 +34,7 @@ def send_email_mcp(to, subject, body):
         print(f"[OK] Email logged (DRY RUN) to {to}")
         return True
 
-    # Real send via MCP
+    # Real send via MCP (stdio JSON-RPC)
     try:
         # Construct MCP request
         mcp_request = {
@@ -46,7 +46,7 @@ def send_email_mcp(to, subject, body):
                 "arguments": {
                     "to": to,
                     "subject": subject,
-                    "body": body
+                    "text": body
                 }
             }
         }
@@ -63,8 +63,18 @@ def send_email_mcp(to, subject, body):
         )
 
         if result.returncode == 0:
-            response = json.loads(result.stdout)
-            if response.get("result", {}).get("success"):
+            # MCP servers may emit multiple JSON-RPC messages; parse the last JSON object.
+            response = None
+            for line in reversed((result.stdout or "").splitlines()):
+                candidate = line.strip()
+                if candidate.startswith("{") and candidate.endswith("}"):
+                    try:
+                        response = json.loads(candidate)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+
+            if response and "error" not in response:
                 # Log successful send
                 LOGS_DIR.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().isoformat()
@@ -75,7 +85,8 @@ def send_email_mcp(to, subject, body):
                 print(f"[OK] Email sent to {to}")
                 return True
             else:
-                print(f"[ERROR] MCP returned error: {response.get('error', 'Unknown error')}")
+                err = (response or {}).get("error", "Unknown error")
+                print(f"[ERROR] MCP returned error: {err}")
                 return False
         else:
             print(f"[ERROR] MCP call failed: {result.stderr}")

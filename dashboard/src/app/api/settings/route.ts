@@ -72,6 +72,30 @@ export async function GET() {
                 }
             }
 
+            if (key === "INSTAGRAM_POST_METHOD" && value.toLowerCase() === "playwright") {
+                if (!integrations.find(i => i.id === "instagram")) {
+                    integrations.push({
+                        id: "instagram",
+                        name: "Instagram",
+                        icon: "IG",
+                        connected: true,
+                        envKey: "INSTAGRAM_POST_METHOD"
+                    });
+                }
+            }
+
+            if (key.includes("INSTAGRAM_ACCESS_TOKEN") && value && value.length > 5) {
+                if (!integrations.find(i => i.id === "instagram")) {
+                    integrations.push({
+                        id: "instagram",
+                        name: "Instagram",
+                        icon: "IG",
+                        connected: true,
+                        envKey: "INSTAGRAM_ACCESS_TOKEN"
+                    });
+                }
+            }
+
             if (key.includes("ODOO") && value && value.length > 5) {
                 if (!integrations.find(i => i.id === "odoo")) {
                     integrations.push({

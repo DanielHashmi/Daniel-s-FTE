@@ -12,14 +12,14 @@ import random
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from playwright.sync_api import sync_playwright, Page, BrowserContext
 
 from .base import BaseWatcher
+from src.lib.vault import vault
 
 class WhatsAppWatcher(BaseWatcher):
     def __init__(self, interval: int = 60, headless: bool = True):
         # Safety: WhatsApp can detect robotic intervals. We will apply jitter.
-        super().__init__("whatsapp_watcher", interval)
+        super().__init__("whatsapp_watcher", interval, domain=os.getenv("WHATSAPP_DOMAIN", "personal"))
         self.headless = headless
         self.session_path = Path("whatsapp_session")
         self.browser = None
@@ -39,6 +39,8 @@ class WhatsAppWatcher(BaseWatcher):
     def _setup_browser(self):
         """Initialize Playwright browser with persistent context."""
         try:
+            from playwright.sync_api import sync_playwright
+
             self.p = sync_playwright().start()
             
             # Ensure absolute path for session
@@ -71,6 +73,25 @@ class WhatsAppWatcher(BaseWatcher):
 
         except Exception as e:
             self.logger.error(f"Failed to setup Playwright: {e}")
+            # Graceful degradation: raise an alert instead of crashing the watcher loop.
+            try:
+                vault.ensure_structure()
+                alert_path = vault.dirs["alerts"] / f"{int(time.time())}_whatsapp_watcher_playwright_error.md"
+                alert_path.write_text(
+                    f"# WhatsApp Watcher Error\n\n"
+                    f"Timestamp: {datetime.utcnow().isoformat()}Z\n\n"
+                    f"Error: {e}\n\n"
+                    "Watcher will keep running but cannot monitor WhatsApp until this is fixed.\n",
+                    encoding="utf-8",
+                )
+                self.logger.log_action(
+                    action_type="watcher_error",
+                    result="error",
+                    target=str(alert_path),
+                    details={"watcher": "whatsapp", "error": str(e)[:200]},
+                )
+            except Exception:
+                pass
 
     def check_for_updates(self):
         """Check for unread chats and process them."""

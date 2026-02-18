@@ -44,7 +44,7 @@ ODOO_PASSWORD=admin
 DRY_RUN=true
 ```
 
-The Odoo client currently uses Odoo's XML-RPC API (`/xmlrpc/2/*`).
+The Odoo client uses Odoo JSON-RPC (`/jsonrpc`) for Odoo 19+ compatibility.
 
 ## Test The Odoo Skill (CLI)
 

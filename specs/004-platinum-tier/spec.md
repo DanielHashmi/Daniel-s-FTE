@@ -1,85 +1,108 @@
 ---
-title: "Platinum Tier - Local-First Digital FTE (Dashboard + Brain)"
+title: "Platinum Tier - Hackathon 0 Compliance"
 short_name: platinum-tier
 tier: platinum
 feature_number: 004
 ratified: 2026-01-20
-last_amended: 2026-02-14
+last_amended: 2026-02-15
 status: active
 ---
 
-# Platinum Tier: Local-First Digital FTE (Current Repo Reality)
+# Platinum Tier: Always-On Cloud + Local Executive
 
 ## User Description
 
-Operate a local-first "Digital FTE" that:
-- Provides a web UI to manage approvals and social drafts
-- Uses a Python orchestrator to monitor the vault and execute approved actions
-- Treats external/public actions as sensitive and requires explicit human approval
-- Can generate and publish Facebook posts using Qwen (copy generation) + Playwright (browser automation)
+Operate a hackathon-compliant Digital FTE where cloud and local agents share a synced vault, with strict HITL controls and MCP-based external actions.
 
 ## User Scenarios
 
-### Scenario A: Create, Approve, Post to Facebook (Primary)
-1. User opens the dashboard Social page
-2. User generates a draft with Qwen (optional) and edits the content
-3. User queues the post, creating an approval file in `AI_Employee_Vault/Pending_Approval/`
-4. User approves in the UI (or moves the file to `AI_Employee_Vault/Approved/`)
-5. Orchestrator posts the approved `## Content` to Facebook via Playwright
-6. The approval file is moved to `AI_Employee_Vault/Done/` and an audit log entry is written
+### Scenario A: Cloud Draft, Local Execute (Email)
+1. Email arrives while local machine is offline
+2. Cloud agent triages and writes draft approval in `Pending_Approval/<domain>/`
+3. Local user approves after returning
+4. Local agent executes send via MCP
+5. Action and plan move to `Done/`, with audit logs recorded
 
-### Scenario B: Human-in-the-Loop Safety (Always-On)
-1. A sensitive action is proposed (public post, invoice posting, etc.)
-2. The system writes a clear approval request file
-3. Nothing executes until the file is explicitly approved
-4. Rejected approvals are not executed
+### Scenario B: Social Drafts and Final Post
+1. Cloud drafts social content (Facebook/Instagram/Twitter/LinkedIn)
+2. Human approves in UI or by moving file to `Approved/`
+3. Local agent posts exactly approved content via MCP
+4. Action is logged and archived in `Done/`
 
-### Scenario C: Orchestrator Liveness in the UI
-1. Orchestrator runs locally
-2. It writes a heartbeat file on a short interval
-3. The dashboard shows whether the brain is currently running
+### Scenario C: Odoo Cloud + Local Approval
+1. Cloud Odoo sync obtains draft accounting state
+2. Posting invoices/payments requires local approval
+3. Local executes approved posting through Odoo MCP
+4. Logs preserve full action history
 
 ## Success Criteria
 
-- The dashboard runs locally and can view approvals, social drafts, and status.
-- The orchestrator detects approved items within a short time window (seconds).
-- For Facebook approvals, the system posts exactly what was approved (no regeneration after approval).
-- `DRY_RUN=true` prevents live external actions (including browser posting).
-- No secrets are committed: credentials are provided via environment variables / local session dirs.
+- Cloud orchestrator can run continuously and write drafts/signals.
+- Local orchestrator is the only executor of approved external actions.
+- Claim-by-move avoids duplicate ownership in synced vault workflows.
+- Dashboard remains local single-writer with cloud signals merged by local.
+- Odoo cloud deployment includes HTTPS, backups, and health monitoring artifacts.
+- Platinum gate flow passes: cloud draft -> local approve -> MCP execute -> done + logs.
 
 ## Functional Requirements
 
-### FR-001: Vault-First Workflow (Local-First)
-- The vault folder `AI_Employee_Vault/` is the source of truth for actions, approvals, and logs.
-- Approval folders are used as the execution state machine:
-  - `Pending_Approval/`, `Approved/`, `Rejected/`, `Done/`
+### FR-001: Vault-First State Machine
+- `AI_Employee_Vault/` is system of record.
+- State transitions use folders:
+  - `Needs_Action/` -> `In_Progress/<agent>/` -> `Pending_Approval/` -> `Approved|Rejected` -> `Done/`
 
-### FR-002: Web UI for Management
-- A local dashboard provides:
-  - Login gate (password-based)
-  - Social post creation and queueing for approval
-  - Approval review and approve/reject actions
-  - Visibility into orchestrator running status
+### FR-002: Cloud/Local Work-Zone Specialization
+- Cloud role: triage + draft-only workflows for email/social/accounting.
+- Local role: approvals, WhatsApp/banking sessions, and final send/post/payment actions.
+- Role behavior is controlled by `AGENT_ROLE`, `AGENT_ID`, and strict ownership policy.
 
-### FR-003: Orchestrator Executes Approved Items
-- The orchestrator monitors `AI_Employee_Vault/Approved/` for `.md` and `.yaml` files.
-- On successful execution it moves items to `AI_Employee_Vault/Done/`.
-- On transient failures it retries with a backoff (without losing the approval file).
+### FR-003: Claim-by-Move Delegation
+- First agent to move from `Needs_Action` to `In_Progress/<agent>/` owns the item.
+- Other agents skip already-claimed work.
 
-### FR-004: Facebook Posting via Qwen + Playwright
-- Draft generation uses Qwen CLI locally.
-- Publishing uses Playwright with a persistent session directory (`FACEBOOK_SESSION_DIR`).
-- If the approved file contains `## Content`, that text is posted exactly.
-- If no content exists, the system may generate then post (but this is not the normal UI flow).
+### FR-004: HITL For Sensitive Actions
+- Sensitive actions are never executed from pending state.
+- Execution requires explicit move to `Approved/`.
+- Rejections are logged and not executed.
 
-### FR-005: Auditability and Safety Controls
-- Every approval decision is logged with timestamp and file reference.
-- Orchestrator liveness is observable via a heartbeat file in `AI_Employee_Vault/Logs/`.
-- A global `DRY_RUN` mode exists for safe testing.
+### FR-005: MCP Action Layer
+- External side effects execute via MCP servers:
+  - Email MCP
+  - Social MCP
+  - Odoo MCP
+- `DRY_RUN` and `DEV_MODE` must be supported.
 
-## Non-Goals (In This Repo As Implemented Today)
+### FR-006: Odoo Cloud Deployment Controls
+- Odoo stack must include:
+  - cloud deployment compose
+  - HTTPS proxy config
+  - automated backup service
+  - health-check script
 
-- Always-on cloud deployment, PM2-managed cloud services, Syncthing-based cloud/local handover.
-- Multi-agent claim-by-move conflict resolution between cloud and local agents.
-- Storing or syncing secrets (tokens, cookies, sessions) via git or vault sync.
+### FR-007: Ralph Wiggum Persistence Loop
+- Persistent loop must iterate orchestration cycles until completion condition or max iterations.
+- Loop state/history must be recorded in vault folders.
 
+### FR-008: Audit Logging and Traceability
+- All approval decisions and executed actions are logged with timestamps and outcome.
+- Heartbeat file enables liveness checks.
+
+### FR-009: Web UI Operational Surface
+- Local dashboard supports:
+  - approvals list + approve/reject actions
+  - social draft queueing
+  - orchestrator liveness status
+  - domain-aware file operations
+
+### FR-010: Platinum Demo Gate
+- Minimum gate:
+  - local offline
+  - cloud drafts approval
+  - local approves and executes via MCP
+  - logs written
+  - task moved to `Done/`
+
+## Non-Goals
+
+- Replacing vault handoffs with A2A messaging (optional phase 2)
+- Removing HITL for sensitive actions

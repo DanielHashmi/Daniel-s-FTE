@@ -97,7 +97,7 @@ class PlanManager:
             used_engine = "template"
 
             # Determine primary engine from environment
-            primary_engine = os.environ.get("REASONING_ENGINE", "claude").lower()
+            primary_engine = os.environ.get("REASONING_ENGINE", "qwen").lower()
             
             # 1. Try Primary Engine
             if primary_engine == "qwen" and self.qwen_invoker and self.qwen_invoker.is_available:
@@ -145,16 +145,18 @@ class PlanManager:
                 used_engine = "template"
 
             # Write Plan File
-            timestamp = int(time.time())
-            filename = f"{timestamp}_plan_{frontmatter.get('id', 'unknown')}.md"
-            path = vault.write_plan(filename, plan_content)
+            action_id = frontmatter.get("id", "unknown")
+            domain = str(frontmatter.get("domain") or "").strip().lower() or None
+            filename = f"PLAN_{action_id}.md"
+            path = vault.write_plan(filename, plan_content, domain=domain)
 
             self.logger.log_action(
                 action_type="create_plan",
                 result="success",
                 target=str(path),
                 details={
-                    "source_action": frontmatter.get('id'),
+                    "source_action": action_id,
+                    "domain": domain or "general",
                     "engine": used_engine
                 }
             )
@@ -167,24 +169,30 @@ class PlanManager:
 
     def _generate_plan_logic(self, meta: Dict[str, Any], body: str) -> str:
         """Template fallback logic."""
-        action_type = meta.get("type", "unknown")
-        action_id = meta.get("id", "unknown")
+        action_type = str(meta.get("type", "unknown"))
+        action_id = str(meta.get("id", "unknown"))
+        source = str(meta.get("source", "unknown"))
+        domain = str(meta.get("domain") or "").strip().lower() or "general"
+        priority = str(meta.get("priority") or "normal").strip().lower()
+        requires_approval = action_type in {"email", "message", "social", "finance", "payment", "invoice"}
 
         plan = f"""---
-id: "plan_{hashlib.md5(str(time.time()).encode()).hexdigest()[:8]}"
-action_ref: "{action_id}"
+plan_id: "PLAN_{action_id}"
+action_id: "{action_id}"
+action_type: "{action_type}"
+source: "{source}"
+domain: "{domain}"
 created: "{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
-status: "planning"
-planning_mode: "template_fallback"
+status: "draft"
+priority: "{priority}"
+requires_approval: {str(requires_approval).lower()}
+engine: "template"
 ---
 
 # Objective
-Handle incoming {action_type} from {meta.get('source', 'unknown')}.
+Handle incoming {action_type} from {source}.
 
-# Context
-{body[:200]}...
-
-# Execution Steps
+# Steps
 """
 
         if action_type == "email":
@@ -200,8 +208,8 @@ Handle incoming {action_type} from {meta.get('source', 'unknown')}.
             plan += "- [ ] 2. Determine appropriate action\n"
             plan += "- [ ] 3. Execute or request approval\n"
 
-        plan += "\n# Note\n"
-        plan += "*Generated via Template Fallback (Claude/Qwen unavailable).*\n"
+        plan += "\n# Notes\n"
+        plan += "*Generated via template fallback (Qwen unavailable).*\n"
 
         return plan
 

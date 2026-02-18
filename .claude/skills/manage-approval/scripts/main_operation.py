@@ -1,166 +1,219 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
+"""manage-approval skill
+
+Lists, approves, and rejects HITL approval request files.
+
+Supports Platinum domain routing:
+- Pending_Approval/<domain>/
+- Approved/<domain>/
+- Rejected/<domain>/
+"""
+
+from __future__ import annotations
+
 import argparse
-import sys
+import os
 import shutil
-import json
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-# Configuration
-VAULT_ROOT = Path("AI_Employee_Vault")
-PENDING_DIR = VAULT_ROOT / "Pending_Approval"
-APPROVED_DIR = VAULT_ROOT / "Approved"
-REJECTED_DIR = VAULT_ROOT / "Rejected"
-LOGS_DIR = VAULT_ROOT / "Logs"
+import yaml
 
-def setup_dirs():
-    for d in [PENDING_DIR, APPROVED_DIR, REJECTED_DIR, LOGS_DIR]:
-        d.mkdir(parents=True, exist_ok=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+os.chdir(PROJECT_ROOT)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-def log_action(action, file_name, result, details=None):
-    today = datetime.now().strftime("%Y-%m-%d")
-    log_file = LOGS_DIR / f"{today}.json"
+from src.lib.logging import get_logger
+from src.lib.vault import vault
 
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "approval_workflow",
-        "sub_action": action,
-        "target": file_name,
-        "result": result,
-        "actor": "human_via_skill",
-        "details": details or {}
-    }
+logger = get_logger("manage_approval_skill")
 
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _read_frontmatter(path: Path) -> Dict[str, Any]:
     try:
-        if log_file.exists():
-            with open(log_file, 'r') as f:
-                logs = json.load(f)
-        else:
-            logs = []
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return {}
 
-        logs.append(entry)
+    parts = raw.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    try:
+        return yaml.safe_load(parts[1]) or {}
+    except Exception:
+        return {}
 
-        with open(log_file, 'w') as f:
-            json.dump(logs, f, indent=2)
 
-    except Exception as e:
-        print(f"Warning: Failed to write log: {e}", file=sys.stderr)
+def _list_pending() -> List[Path]:
+    base = vault.dirs["pending_approval"]
+    if not base.exists():
+        return []
+    return sorted([p for p in base.rglob("*.md") if p.is_file()], key=lambda p: p.name)
 
-def list_approvals():
-    files = list(PENDING_DIR.glob("*.md"))
+
+def list_approvals() -> int:
+    files = _list_pending()
     if not files:
         print("No pending approvals.")
-        return
+        return 0
 
-    print(f"{'ID':<30} | {'Type':<15} | {'Created':<20} | {'Summary'}")
-    print("-" * 100)
+    print(f"{'FILE':<45} | {'ACTION':<14} | {'PLATFORM':<10} | {'DOMAIN':<10} | {'CREATED'}")
+    print("-" * 110)
 
     for f in files:
-        # Simple parsing of frontmatter
-        content = f.read_text()
-        lines = content.split('\n')
-        type_str = "unknown"
-        created = "unknown"
-        summary = f.name
+        meta = _read_frontmatter(f)
+        action = str(meta.get("action") or meta.get("action_type") or "").strip()
+        platform = str(meta.get("platform") or "").strip()
+        domain = str(meta.get("domain") or "").strip()
+        created = str(meta.get("created") or meta.get("timestamp") or "").strip()
+        rel = f.relative_to(vault.root)
+        print(f"{str(rel):<45} | {action:<14} | {platform:<10} | {domain:<10} | {created}")
 
-        in_frontmatter = False
-        for line in lines:
-            if line.strip() == "---":
-                if in_frontmatter: break
-                in_frontmatter = True
-                continue
-            if in_frontmatter:
-                if line.startswith("type:"): type_str = line.split(":", 1)[1].strip()
-                if line.startswith("created:"): created = line.split(":", 1)[1].strip()
-                if line.startswith("action:"): summary = line.split(":", 1)[1].strip()
+    return 0
 
-        print(f"{f.name:<30} | {type_str:<15} | {created:<20} | {summary}")
 
-def get_file(file_id):
-    # Try exact match
-    f = PENDING_DIR / file_id
-    if f.exists(): return f
-
-    # Try fuzzy match (e.g., just the name without .md, or part of name)
-    # If file_id doesn't end with .md, append it
-    if not file_id.endswith(".md"):
-        f = PENDING_DIR / f"{file_id}.md"
-        if f.exists(): return f
-
-    # Search for containing string
-    matches = list(PENDING_DIR.glob(f"*{file_id}*"))
-    if len(matches) == 1:
-        return matches[0]
-    elif len(matches) > 1:
-        print(f"Error: Ambiguous ID '{file_id}', matches multiple files:")
-        for m in matches: print(f"  - {m.name}")
+def _resolve_pending_file(file_id: str) -> Optional[Path]:
+    if not file_id:
         return None
 
-    print(f"Error: File '{file_id}' not found in {PENDING_DIR}")
+    base = vault.dirs["pending_approval"]
+    exact = base / file_id
+    if exact.exists():
+        return exact
+
+    if not file_id.endswith(".md"):
+        exact = base / f"{file_id}.md"
+        if exact.exists():
+            return exact
+
+    matches = [p for p in base.rglob(f"*{file_id}*") if p.is_file()]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        print(f"Ambiguous ID '{file_id}'. Matches:")
+        for m in matches:
+            print(f"- {m.relative_to(vault.root)}")
+        return None
+
+    print(f"Not found in Pending_Approval: {file_id}")
     return None
 
-def approve(file_id):
-    f = get_file(file_id)
-    if not f: return False
 
-    dest = APPROVED_DIR / f.name
+def approve(file_id: str) -> int:
+    f = _resolve_pending_file(file_id)
+    if not f:
+        return 1
+
+    meta = _read_frontmatter(f)
+    domain = str(meta.get("domain") or "").strip().lower() or None
+
+    dest_dir = vault.get_domain_dir("approved", domain)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f.name
+
     try:
         shutil.move(str(f), str(dest))
-        print(f"✓ Approved: {f.name} -> {dest}")
-        log_action("approve", f.name, "success")
-        return True
+        print(f"Approved: {dest.relative_to(vault.root)}")
+        logger.log_action(
+            action_type="approval_workflow",
+            result="success",
+            target=str(dest),
+            details={"decision": "approved", "source": str(f)},
+            approval_status="approved",
+            approved_by="human",
+        )
+        return 0
     except Exception as e:
-        print(f"✗ Failed to approve {f.name}: {e}")
-        log_action("approve", f.name, "failure", {"error": str(e)})
-        return False
+        print(f"Failed to approve: {e}")
+        logger.log_action(
+            action_type="approval_workflow",
+            result="error",
+            target=str(f),
+            details={"decision": "approved", "error": str(e)},
+            approval_status="approved",
+            approved_by="human",
+        )
+        return 1
 
-def reject(file_id, reason):
-    f = get_file(file_id)
-    if not f: return False
 
-    dest = REJECTED_DIR / f.name
+def reject(file_id: str, reason: str) -> int:
+    f = _resolve_pending_file(file_id)
+    if not f:
+        return 1
+
+    meta = _read_frontmatter(f)
+    domain = str(meta.get("domain") or "").strip().lower() or None
+
+    dest_dir = vault.get_domain_dir("rejected", domain)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f.name
+
     try:
-        # Append rejection reason to file content
-        content = f.read_text()
-        rejection_note = f"\n\n## Rejection Info\n- **Rejected At**: {datetime.now().isoformat()}\n- **Reason**: {reason}\n"
-        dest.write_text(content + rejection_note)
-        f.unlink() # Remove original
+        raw = f.read_text(encoding="utf-8", errors="replace")
+        note = (
+            "\n\n## Rejection Info\n"
+            f"- Rejected At: {_utc_now_iso()}\n"
+            f"- Reason: {reason}\n"
+        )
+        dest.write_text(raw + note, encoding="utf-8")
+        f.unlink()
 
-        print(f"✓ Rejected: {f.name} -> {dest}")
-        log_action("reject", f.name, "success", {"reason": reason})
-        return True
+        print(f"Rejected: {dest.relative_to(vault.root)}")
+        logger.log_action(
+            action_type="approval_workflow",
+            result="success",
+            target=str(dest),
+            details={"decision": "rejected", "reason": reason},
+            approval_status="rejected",
+            approved_by="human",
+        )
+        return 0
     except Exception as e:
-        print(f"✗ Failed to reject {f.name}: {e}")
-        log_action("reject", f.name, "failure", {"error": str(e)})
-        return False
+        print(f"Failed to reject: {e}")
+        logger.log_action(
+            action_type="approval_workflow",
+            result="error",
+            target=str(f),
+            details={"decision": "rejected", "error": str(e)},
+            approval_status="rejected",
+            approved_by="human",
+        )
+        return 1
 
-def main():
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Manage approval queue")
     parser.add_argument("--action", required=True, choices=["list", "approve", "reject"])
     parser.add_argument("--id", help="File ID or name for approve/reject")
     parser.add_argument("--reason", help="Reason for rejection")
 
     args = parser.parse_args()
-
-    setup_dirs()
+    vault.ensure_structure()
 
     if args.action == "list":
-        list_approvals()
-    elif args.action == "approve":
+        return list_approvals()
+
+    if args.action == "approve":
         if not args.id:
-            print("Error: --id required for approve")
-            sys.exit(1)
-        if not approve(args.id):
-            sys.exit(1)
-    elif args.action == "reject":
-        if not args.id:
-            print("Error: --id required for reject")
-            sys.exit(1)
-        if not args.reason:
-            print("Error: --reason required for reject")
-            sys.exit(1)
-        if not reject(args.id, args.reason):
-            sys.exit(1)
+            print("--id is required")
+            return 1
+        return approve(args.id)
+
+    if args.action == "reject":
+        if not args.id or not args.reason:
+            print("--id and --reason are required")
+            return 1
+        return reject(args.id, args.reason)
+
+    return 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,358 +1,336 @@
-#!/usr/bin/env python3
-"""CEO Briefing Generator - Gold Tier Skill
+﻿#!/usr/bin/env python3
+"""CEO Briefing Generator (Gold Tier Skill)
 
-Generate weekly business audit and CEO briefing with revenue, tasks,
-bottlenecks, and proactive suggestions.
+Generates the weekly business + accounting audit and writes a CEO briefing into the vault.
+
+Hackathon expectation:
+- Reads Business_Goals.md, Done/, and bank/accounting transactions
+- Writes a "Monday Morning CEO Briefing" markdown file with YAML frontmatter
+- Logs every run to /Logs/YYYY-MM-DD.json
 """
+
+from __future__ import annotations
+
 import argparse
-import sys
 import json
-import os
+import re
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
-# Config
-VAULT_ROOT = Path("AI_Employee_Vault")
-BRIEFINGS_DIR = VAULT_ROOT / "Briefings"
-ACCOUNTING_DIR = VAULT_ROOT / "Accounting"
-DONE_DIR = VAULT_ROOT / "Done"
-LOGS_DIR = VAULT_ROOT / "Logs"
-BUSINESS_GOALS = VAULT_ROOT / "Business_Goals.md"
-AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+from src.lib.logging import get_logger
+from src.lib.vault import vault
 
-# Sample data for dry-run mode
-SAMPLE_GOALS = """
-## Q1 2026 Objectives
+logger = get_logger("ceo_briefing_skill")
 
-### Revenue Target
-- Monthly goal: $10,000
-- Current MTD: $4,500
-
-### Key Metrics
-| Metric | Target | Alert Threshold |
-|--------|--------|-----------------|
-| Client response time | < 24 hours | > 48 hours |
-| Invoice payment rate | > 90% | < 80% |
-
-### Upcoming Deadlines
-- Project Alpha Final: 2026-01-25
-- Q1 Tax Filing: 2026-01-31
-- Client B Proposal: 2026-02-05
-"""
+# Weekly audit logic (hackathon doc style): match merchants/descriptions to subscription names.
+SUBSCRIPTION_PATTERNS: Dict[str, str] = {
+    "netflix.com": "Netflix",
+    "spotify.com": "Spotify",
+    "adobe.com": "Adobe Creative Cloud",
+    "notion.so": "Notion",
+    "slack.com": "Slack",
+}
 
 
-def setup_dirs():
-    BRIEFINGS_DIR.mkdir(parents=True, exist_ok=True)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def audit_log(action: str, target: str, status: str, details: Optional[dict] = None):
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "ceo_briefing",
-        "sub_action": action,
-        "target": target,
-        "result": status,
-        "actor": "ceo_briefing_skill",
-        "details": details or {}
-    }
+def _parse_date_yyyy_mm_dd(value: str) -> Optional[date]:
+    if not value:
+        return None
+    txt = str(value).strip()
+    if not txt:
+        return None
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(txt, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _load_transactions() -> List[Dict[str, Any]]:
+    """Load transactions from the vault (banking watcher and/or accounting sync)."""
+
+    candidates = []
+
+    banking_path = vault.root / "Banking" / "transactions.json"
+    if banking_path.exists():
+        candidates.append(banking_path)
+
+    # Accounting sync path: Accounting/transactions/<YYYY-MM>/transactions.json
+    month_dir = vault.dirs["accounting"] / "transactions" / datetime.now().strftime("%Y-%m")
+    month_path = month_dir / "transactions.json"
+    if month_path.exists():
+        candidates.append(month_path)
+
+    # Legacy file name used by earlier versions
+    legacy_path = vault.dirs["accounting"] / f"transactions_{datetime.now().strftime('%Y-%m')}.json"
+    if legacy_path.exists():
+        candidates.append(legacy_path)
+
+    for p in candidates:
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                return raw
+            if isinstance(raw, dict) and isinstance(raw.get("transactions"), list):
+                return raw["transactions"]
+        except Exception:
+            continue
+
+    return []
+
+
+def _weekly_period(today: date) -> Tuple[date, date]:
+    # Default period is the last 7 days ending yesterday (matches Sunday-night -> Monday briefing).
+    end = today - timedelta(days=1)
+    start = end - timedelta(days=6)
+    return start, end
+
+
+def _next_monday(today: date) -> date:
+    if today.weekday() == 0:
+        return today
+    delta = (7 - today.weekday()) % 7
+    return today + timedelta(days=delta)
+
+
+def _money(value: float) -> str:
+    return f"${value:,.2f}"
+
+
+def _extract_monthly_goal_from_business_goals(path: Path) -> Optional[float]:
+    if not path.exists():
+        return None
+    txt = path.read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"Monthly goal:\s*\$?([0-9][0-9,]*(?:\.[0-9]{1,2})?)", txt, flags=re.IGNORECASE)
+    if not m:
+        return None
     try:
-        logs = json.loads(AUDIT_LOG.read_text()) if AUDIT_LOG.exists() else []
-        logs.append(entry)
-        AUDIT_LOG.write_text(json.dumps(logs, indent=2))
-    except Exception as e:
-        print(f"Warning: Audit log failed: {e}", file=sys.stderr)
+        return float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
 
 
-def get_financial_data(days: int = 7) -> dict:
-    """Get financial data from Xero sync or use sample data."""
-    month = datetime.now().strftime("%Y-%m")
-    tx_file = ACCOUNTING_DIR / f"transactions_{month}.json"
+def _completed_tasks(days: int = 7) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    done_dir = vault.dirs["done"]
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    if tx_file.exists():
-        transactions = json.loads(tx_file.read_text())
-    else:
-        # Sample data for demonstration
-        transactions = [
-            {"type": "invoice", "amount": 1500, "client": "Acme Corp", "date": "2026-01-15", "status": "paid"},
-            {"type": "invoice", "amount": 2500, "client": "TechStart", "date": "2026-01-16", "status": "unpaid"},
-            {"type": "expense", "amount": -99, "vendor": "Adobe", "category": "Software", "date": "2026-01-10"},
-            {"type": "expense", "amount": -49, "vendor": "Notion", "category": "Software", "date": "2026-01-12"},
-            {"type": "payment", "amount": 1500, "from": "Acme Corp", "date": "2026-01-17"},
-        ]
-
-    revenue = sum(t["amount"] for t in transactions if t.get("amount", 0) > 0)
-    expenses = sum(abs(t["amount"]) for t in transactions if t.get("amount", 0) < 0)
-    net = revenue - expenses
-
-    # Subscription analysis
-    subscriptions = [t for t in transactions if t.get("category") == "Software"]
-
-    return {
-        "weekly_revenue": revenue,
-        "mtd_revenue": revenue,  # Simplified
-        "monthly_goal": 10000,
-        "expenses": expenses,
-        "net_profit": net,
-        "subscriptions": subscriptions,
-        "transactions": transactions
-    }
-
-
-def get_completed_tasks(days: int = 7) -> list:
-    """Get completed tasks from Done folder."""
-    done_files = []
-
-    if DONE_DIR.exists():
-        for f in DONE_DIR.glob("*.md"):
-            try:
-                stat = f.stat()
-                # Check if modified in last N days
-                if datetime.fromtimestamp(stat.st_mtime) > datetime.now() - timedelta(days=days):
-                    done_files.append({
-                        "name": f.stem,
-                        "completed": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
-                        "size": stat.st_size
-                    })
-            except Exception:
+    for p in sorted(done_dir.glob("*"), key=lambda x: x.name):
+        if not p.is_file():
+            continue
+        try:
+            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+            if mtime < cutoff:
                 continue
+            out.append({
+                "name": p.name,
+                "completed": mtime.date().isoformat(),
+            })
+        except Exception:
+            continue
 
-    # Add sample data if empty
-    if not done_files:
-        done_files = [
-            {"name": "Invoice_Acme_Corp", "completed": "2026-01-17", "size": 512},
-            {"name": "Email_Client_Followup", "completed": "2026-01-16", "size": 256},
-            {"name": "Social_LinkedIn_Post", "completed": "2026-01-15", "size": 128},
-        ]
-
-    return done_files
+    return out
 
 
-def get_upcoming_deadlines(horizon_days: int = 14) -> list:
-    """Extract deadlines from Business_Goals.md."""
-    deadlines = []
+def _upcoming_deadlines(horizon_days: int = 14) -> List[Dict[str, Any]]:
+    goals_path = vault.root / "Business_Goals.md"
+    if not goals_path.exists():
+        return []
 
-    if BUSINESS_GOALS.exists():
-        content = BUSINESS_GOALS.read_text()
-        # Simple deadline extraction - look for dates
-        import re
-        date_pattern = r'(\d{4}-\d{2}-\d{2})'
-        for line in content.split('\n'):
-            if 'deadline' in line.lower() or 'due' in line.lower() or '-' in line:
-                matches = re.findall(date_pattern, line)
-                for match in matches:
-                    try:
-                        date = datetime.strptime(match, "%Y-%m-%d")
-                        days_remaining = (date - datetime.now()).days
-                        if 0 <= days_remaining <= horizon_days:
-                            deadlines.append({
-                                "description": line.strip("- ").strip(),
-                                "date": match,
-                                "days_remaining": days_remaining,
-                                "at_risk": days_remaining < 7
-                            })
-                    except ValueError:
-                        continue
+    today = datetime.now(timezone.utc).date()
+    content = goals_path.read_text(encoding="utf-8", errors="replace")
+    results: List[Dict[str, Any]] = []
 
-    # Add sample deadlines if empty
-    if not deadlines:
-        today = datetime.now()
-        deadlines = [
-            {"description": "Project Alpha Final", "date": (today + timedelta(days=6)).strftime("%Y-%m-%d"),
-             "days_remaining": 6, "at_risk": True},
-            {"description": "Q1 Tax Filing", "date": (today + timedelta(days=12)).strftime("%Y-%m-%d"),
-             "days_remaining": 12, "at_risk": False},
-        ]
-
-    return sorted(deadlines, key=lambda x: x["days_remaining"])
-
-
-def analyze_subscriptions(transactions: list) -> list:
-    """Analyze subscriptions for unused/wasteful spending."""
-    subscriptions = []
-    for t in transactions:
-        if t.get("category") == "Software" or t.get("type") == "expense":
-            vendor = t.get("vendor", "Unknown")
-            amount = abs(t.get("amount", 0))
-
-            # Simple heuristic - flag subscriptions with no recent "activity"
-            # In production, this would check login data
-            subscriptions.append({
-                "name": vendor,
-                "monthly_cost": amount,
-                "last_activity": "Unknown",  # Would need activity tracking
-                "recommendation": "Review" if amount > 30 else "Keep"
+    # Simple: any YYYY-MM-DD in a line counts as a deadline candidate.
+    for line in content.splitlines():
+        m = re.search(r"(\d{4}-\d{2}-\d{2})", line)
+        if not m:
+            continue
+        d = _parse_date_yyyy_mm_dd(m.group(1))
+        if not d:
+            continue
+        days_remaining = (d - today).days
+        if 0 <= days_remaining <= horizon_days:
+            results.append({
+                "description": line.strip().lstrip("- ").strip(),
+                "date": d.isoformat(),
+                "days_remaining": days_remaining,
+                "at_risk": days_remaining < 7,
             })
 
-    return subscriptions
+    results.sort(key=lambda x: x["days_remaining"])
+    return results
 
 
-def generate_briefing(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Path:
-    """Generate comprehensive CEO briefing."""
-    today = datetime.now()
-    week_start = today - timedelta(days=7)
+def _analyze_subscriptions(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    subs: List[Dict[str, Any]] = []
+    for t in transactions:
+        desc = str(t.get("description") or "").lower()
+        amt_raw = t.get("amount")
+        try:
+            amt = float(amt_raw)
+        except Exception:
+            continue
 
-    # Gather data
-    financial = get_financial_data(7)
-    tasks = get_completed_tasks(7)
-    deadlines = get_upcoming_deadlines(14)
-    subscriptions = analyze_subscriptions(financial.get("transactions", []))
+        match = None
+        for pattern, name in SUBSCRIPTION_PATTERNS.items():
+            if pattern in desc:
+                match = name
+                break
+        if not match:
+            continue
 
-    # Calculate metrics
-    goal_progress = (financial["mtd_revenue"] / financial["monthly_goal"]) * 100
-    trend = "On Track" if goal_progress >= 45 else ("Ahead" if goal_progress >= 60 else "Behind")
+        dt = _parse_date_yyyy_mm_dd(str(t.get("date") or ""))
+        subs.append({
+            "name": match,
+            "amount": abs(amt),
+            "date": dt.isoformat() if dt else "",
+            "description": str(t.get("description") or "")[:120],
+        })
 
-    # Generate briefing content
-    briefing = f"""# Monday Morning CEO Briefing
-**Week of {week_start.strftime('%B %d, %Y')}**
-Generated: {today.strftime('%Y-%m-%d %H:%M')}
+    return subs
 
----
 
-## Executive Summary
+def generate_briefing(horizon_days: int = 14) -> Path:
+    vault.ensure_structure()
 
-{trend} for monthly revenue target. {len(tasks)} tasks completed this week.
-{len([d for d in deadlines if d['at_risk']])} deadline(s) at risk in the next 14 days.
+    today = datetime.now(timezone.utc).date()
+    period_start, period_end = _weekly_period(today)
+    briefing_date = _next_monday(today)
 
----
+    transactions = _load_transactions()
 
-## Revenue
+    # Filter by period
+    weekly_txs: List[Dict[str, Any]] = []
+    mtd_txs: List[Dict[str, Any]] = []
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| This Week | ${financial['weekly_revenue']:,.2f} | {"✅" if financial['weekly_revenue'] > 0 else "⚠️"} |
-| Month-to-Date | ${financial['mtd_revenue']:,.2f} | {goal_progress:.0f}% of goal |
-| Monthly Goal | ${financial['monthly_goal']:,.2f} | Target |
-| Net Profit | ${financial['net_profit']:,.2f} | After expenses |
+    for t in transactions:
+        dt = _parse_date_yyyy_mm_dd(str(t.get("date") or ""))
+        if not dt:
+            continue
+        amt_raw = t.get("amount")
+        try:
+            amt = float(amt_raw)
+        except Exception:
+            continue
 
-**Trend:** {trend} {"🚀" if trend == "Ahead" else ("✅" if trend == "On Track" else "⚠️")}
+        if period_start <= dt <= period_end:
+            weekly_txs.append({**t, "_dt": dt, "_amt": amt})
 
----
+        if dt.year == today.year and dt.month == today.month:
+            mtd_txs.append({**t, "_dt": dt, "_amt": amt})
 
-## Completed Tasks ({len(tasks)})
+    weekly_revenue = sum(t["_amt"] for t in weekly_txs if t["_amt"] > 0)
+    weekly_expenses = sum(abs(t["_amt"]) for t in weekly_txs if t["_amt"] < 0)
+    mtd_revenue = sum(t["_amt"] for t in mtd_txs if t["_amt"] > 0)
 
-| Task | Completed |
-|------|-----------|
-"""
-    for task in tasks[:10]:  # Limit to 10
-        briefing += f"| {task['name'].replace('_', ' ')} | {task['completed']} |\n"
+    goals_path = vault.root / "Business_Goals.md"
+    monthly_goal = _extract_monthly_goal_from_business_goals(goals_path) or 0.0
 
-    briefing += f"""
----
+    completed = _completed_tasks(days=7)
+    deadlines = _upcoming_deadlines(horizon_days=horizon_days)
+    subscriptions = _analyze_subscriptions(weekly_txs)
 
-## Bottlenecks
+    goal_progress = 0.0
+    if monthly_goal > 0:
+        goal_progress = (mtd_revenue / monthly_goal) * 100
 
-"""
-    # Simple bottleneck detection - tasks that took longer than average
-    if tasks:
-        briefing += "Based on task completion patterns:\n"
-        briefing += "- No significant bottlenecks detected this week\n"
+    trend = "On track" if goal_progress >= 45 else "Behind"
+
+    frontmatter = (
+        "---\n"
+        f"generated: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+        f"period: {period_start.isoformat()} to {period_end.isoformat()}\n"
+        "schema: ceo_briefing_v1\n"
+        "---\n\n"
+    )
+
+    lines: List[str] = []
+    lines.append(frontmatter.rstrip("\n"))
+    lines.append("# Monday Morning CEO Briefing")
+    lines.append("")
+    lines.append("## Executive Summary")
+    lines.append(f"{trend} on monthly revenue target. {len(completed)} items moved to Done in the last 7 days.")
+    lines.append("")
+
+    lines.append("## Revenue")
+    lines.append(f"- **This Week**: {_money(weekly_revenue)}")
+    lines.append(f"- **MTD**: {_money(mtd_revenue)}" + (f" ({goal_progress:.0f}% of {_money(monthly_goal)} goal)" if monthly_goal > 0 else ""))
+    lines.append(f"- **Expenses (This Week)**: {_money(weekly_expenses)}")
+    lines.append("")
+
+    lines.append(f"## Completed Tasks ({len(completed)})")
+    if completed:
+        for item in completed[:20]:
+            lines.append(f"- [x] {item['name']} ({item['completed']})")
     else:
-        briefing += "- Insufficient data for bottleneck analysis\n"
+        lines.append("- (none)")
+    lines.append("")
 
-    briefing += f"""
----
+    lines.append("## Bottlenecks")
+    lines.append("Insufficient timing data to compute bottlenecks reliably. (Add created/completed timestamps per task to enable.)")
+    lines.append("")
 
-## Cost Optimization
+    lines.append("## Proactive Suggestions")
+    lines.append("### Cost Optimization")
+    if subscriptions:
+        for s in subscriptions[:10]:
+            lines.append(f"- {s['name']}: {_money(float(s['amount']))} ({s.get('date','')})")
+        lines.append("- [ACTION] Review subscriptions above for usefulness. If cancellation is desired, create a Pending_Approval item.")
+    else:
+        lines.append("- No subscription-like transactions detected in this period.")
+    lines.append("")
 
-### Subscription Analysis
-| Service | Monthly Cost | Recommendation |
-|---------|--------------|----------------|
-"""
-    for sub in subscriptions[:5]:
-        briefing += f"| {sub['name']} | ${sub['monthly_cost']:,.2f} | {sub['recommendation']} |\n"
+    lines.append("### Upcoming Deadlines")
+    if deadlines:
+        for d in deadlines:
+            flag = "AT RISK" if d["at_risk"] else "On track"
+            lines.append(f"- {d['date']} ({d['days_remaining']} days): {d['description']} [{flag}]")
+    else:
+        lines.append("- No upcoming deadlines found in Business_Goals.md")
+    lines.append("")
 
-    total_sub_cost = sum(s['monthly_cost'] for s in subscriptions)
-    briefing += f"\n**Total Subscription Costs:** ${total_sub_cost:,.2f}/month\n"
+    lines.append("---")
+    lines.append("*Generated by AI Employee v0.1*")
 
-    briefing += f"""
----
+    filename = f"{briefing_date.isoformat()}_Monday_Briefing.md"
+    out_path = vault.dirs["briefings"] / filename
+    out_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
-## Upcoming Deadlines
+    logger.log_action(
+        action_type="ceo_briefing_generate",
+        result="success",
+        target=str(out_path),
+        parameters={
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "weekly_revenue": weekly_revenue,
+            "mtd_revenue": mtd_revenue,
+        },
+        approval_status="not_required",
+    )
 
-| Deadline | Date | Days Left | Status |
-|----------|------|-----------|--------|
-"""
-    for deadline in deadlines:
-        status = "⚠️ AT RISK" if deadline['at_risk'] else "✅ On Track"
-        briefing += f"| {deadline['description'][:40]} | {deadline['date']} | {deadline['days_remaining']} | {status} |\n"
-
-    briefing += f"""
----
-
-## Proactive Suggestions
-
-1. **Revenue:** {"Consider promotional campaign to boost sales" if trend == "Behind" else "Maintain current momentum"}
-2. **Subscriptions:** Review services marked for "Review" to optimize costs
-3. **Deadlines:** {"Focus on at-risk deadlines this week" if any(d['at_risk'] for d in deadlines) else "All deadlines on track"}
-
----
-
-*Generated by CEO Briefing Skill v1.0*
-*AI Employee - Gold Tier*
-"""
-
-    # Save briefing
-    filename = f"{today.strftime('%Y-%m-%d')}_Monday_Briefing.md"
-    output_path = BRIEFINGS_DIR / filename
-    output_path.write_text(briefing)
-
-    audit_log("generate", str(output_path), "success", {
-        "revenue": financial["weekly_revenue"],
-        "tasks_completed": len(tasks),
-        "deadlines_at_risk": len([d for d in deadlines if d["at_risk"]])
-    })
-
-    return output_path
+    return out_path
 
 
-def main():
-    parser = argparse.ArgumentParser(description="CEO Briefing Generator")
-    parser.add_argument("--action", required=True,
-                       choices=["generate", "revenue", "tasks", "subscriptions", "deadlines"])
-    parser.add_argument("--start", help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end", help="End date (YYYY-MM-DD)")
-    parser.add_argument("--period", default="weekly", choices=["daily", "weekly", "monthly"])
-    parser.add_argument("--detect-bottlenecks", action="store_true")
-    parser.add_argument("--unused-threshold", type=int, default=30, help="Days since last activity")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate the Monday Morning CEO Briefing")
+    parser.add_argument("--action", required=True, choices=["generate"])
     parser.add_argument("--horizon", type=int, default=14, help="Days to look ahead for deadlines")
 
     args = parser.parse_args()
-    setup_dirs()
-
     if args.action == "generate":
-        output = generate_briefing(args.start, args.end)
-        print(f"✓ CEO Briefing generated: {output.name}")
+        path = generate_briefing(horizon_days=args.horizon)
+        print(f"Generated: {path}")
+        return 0
 
-    elif args.action == "revenue":
-        data = get_financial_data(7 if args.period == "weekly" else 30)
-        print(f"Revenue ({args.period}):")
-        print(f"  Total: ${data['weekly_revenue']:,.2f}")
-        print(f"  Expenses: ${data['expenses']:,.2f}")
-        print(f"  Net: ${data['net_profit']:,.2f}")
-
-    elif args.action == "tasks":
-        tasks = get_completed_tasks(7)
-        print(f"Completed Tasks (last 7 days): {len(tasks)}")
-        for task in tasks[:10]:
-            print(f"  - {task['name']} ({task['completed']})")
-
-    elif args.action == "subscriptions":
-        data = get_financial_data(30)
-        subs = analyze_subscriptions(data.get("transactions", []))
-        print(f"Subscription Analysis:")
-        for sub in subs:
-            print(f"  ${sub['monthly_cost']:,.2f}/mo - {sub['name']} [{sub['recommendation']}]")
-
-    elif args.action == "deadlines":
-        deadlines = get_upcoming_deadlines(args.horizon)
-        print(f"Upcoming Deadlines ({args.horizon} days):")
-        for d in deadlines:
-            status = "⚠️" if d["at_risk"] else "✅"
-            print(f"  {status} {d['description']} - {d['date']} ({d['days_remaining']} days)")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

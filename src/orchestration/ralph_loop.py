@@ -95,14 +95,14 @@ class RalphLoopManager:
                         break
 
             # Create loop state
-            loop_id = self.state_manager.create_loop(
-                task_id=action_file.stem,
+            state = self.state_manager.create_state(
                 prompt=f"Process the task file {action_file.name} and complete all steps.",
                 watch_file=str(action_file),
                 done_folder=str(vault.dirs["done"]),
                 max_iterations=10,
-                completion_promise="TASK_COMPLETE"
+                completion_promise="TASK_COMPLETE",
             )
+            loop_id = state.loop_id
 
             # Log state creation
             self.logger.log_action_with_duration(
@@ -206,7 +206,7 @@ class RalphLoopManager:
             original_check_needs_action()
 
             # Check for Ralph-suitable tasks
-            actions = vault.list_files("needs_action", "*.md")
+            actions = vault.list_files_recursive("needs_action", "*.md")
             if not actions:
                 return
 

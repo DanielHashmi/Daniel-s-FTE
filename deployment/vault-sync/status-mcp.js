@@ -38,7 +38,7 @@ function detectConflicts() {
     if (!fs.existsSync(inProgressPath)) return [];
 
     const agents = fs.readdirSync(inProgressPath);
-    const actionMap = new Map(); // action_id -> [agent, file]
+    const actionMap = new Map(); // action_id/id -> [agent, file]
 
     agents.forEach(agent => {
       const agentPath = path.join(inProgressPath, agent);
@@ -46,7 +46,7 @@ function detectConflicts() {
 
       const files = fs.readdirSync(agentPath);
       files.forEach(file => {
-        if (!file.endsWith('.yaml')) return;
+        if (!file.endsWith('.yaml') && !file.endsWith('.md')) return;
 
         const filePath = path.join(agentPath, file);
         try {
@@ -54,7 +54,7 @@ function detectConflicts() {
           const frontmatter = content.split('---')[1];
           if (frontmatter) {
             const data = yaml.load(frontmatter);
-            const actionId = data?.action_id;
+            const actionId = data?.action_id || data?.id;
 
             if (actionId) {
               if (actionMap.has(actionId)) {
@@ -101,7 +101,7 @@ function getSyncStatus() {
     const needsAction = path.join(vaultPath, 'Needs_Action');
     if (fs.existsSync(needsAction)) {
       const files = fs.readdirSync(needsAction);
-      syncStatus.pendingActions = files.filter(f => f.endsWith('.yaml')).length;
+      syncStatus.pendingActions = files.filter(f => f.endsWith('.yaml') || f.endsWith('.md')).length;
     }
 
     // Check for conflicts
@@ -143,7 +143,7 @@ function checkAgentStatus(agentId) {
     }
 
     const files = fs.readdirSync(agentPath);
-    const yamlFiles = files.filter(f => f.endsWith('.yaml'));
+    const yamlFiles = files.filter(f => f.endsWith('.yaml') || f.endsWith('.md'));
 
     return {
       agentId,

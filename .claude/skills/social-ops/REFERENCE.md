@@ -5,17 +5,17 @@ Detailed documentation for the social-ops skill in production deployment.
 ## Production Architecture
 
 ### MCP Social Server
-The social media operations are provided by the **mcp-social** MCP server, which runs as a separate PM2 process:
-- **Process Name**: mcp-social
-- **Script**: src/mcp/social_server.py
-- **Framework**: FastMCP
+Social media posting is provided by a Node-based MCP server:
+- **Name**: social-mcp
+- **Entrypoint**: mcp-servers/social-mcp/index.js
+- **Framework**: @modelcontextprotocol/sdk (stdio transport)
 - **Protocol**: Model Context Protocol (MCP)
 
-The social server provides capabilities for posting to LinkedIn and checking post status via the MCP protocol.
+In this repo, the Local executor calls the MCP server via stdio JSON-RPC (`tools/call`) after HITL approval.
 
 ### PM2 Configuration
 
-The social server is configured in `ecosystem.config.js`:
+Optional: run the server under PM2 if you want a long-lived process (not required in the current stdio-per-call setup).
 ```javascript
 {
   name: "mcp-social",

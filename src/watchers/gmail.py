@@ -19,7 +19,7 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 class GmailWatcher(BaseWatcher):
     def __init__(self, interval: int = 60):
-        super().__init__("gmail_watcher", interval)
+        super().__init__("gmail_watcher", interval, domain=os.getenv("GMAIL_DOMAIN", "personal"))
         self.service = None
         self.creds = None
         self._auth_attempted = False
@@ -108,6 +108,8 @@ class GmailWatcher(BaseWatcher):
     def process_message(self, msg_id: str):
         """Fetch full message details and create action file."""
         try:
+            if msg_id in self.processed_ids:
+                return
             message = self.service.users().messages().get(userId='me', id=msg_id).execute()
 
             headers = message['payload']['headers']
@@ -140,6 +142,7 @@ class GmailWatcher(BaseWatcher):
                 metadata=metadata,
                 priority=classification.get("priority", "normal")
             )
+            self.processed_ids.add(msg_id)
 
             # Mark as read so we don't process again?
             # Or store processed IDs in a local DB/file to avoid duplicate processing without modifying server state?

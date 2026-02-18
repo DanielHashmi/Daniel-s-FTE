@@ -9,13 +9,22 @@ import os
 import sys
 import json
 import yaml
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Any, List
-from xmlrpc.client import ServerProxy
 import argparse
 import csv
+import urllib.request
+import urllib.error
 from dotenv import load_dotenv
+
+# Ensure project root is on sys.path so this skill can reuse shared libraries.
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.lib.logging import get_logger
 
 # Load environment variables
 # 1. Try loading from current working directory (e.g. when run from project root)
@@ -43,7 +52,7 @@ except Exception as e:
 VAULT_ROOT = Path(os.getenv('VAULT_ROOT', 'AI_Employee_Vault'))
 ACCOUNTING_DIR = VAULT_ROOT / "Accounting"
 LOGS_DIR = VAULT_ROOT / "Logs"
-AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+logger = get_logger("odoo_accounting_skill")
 
 
 def setup_dirs():
@@ -53,21 +62,67 @@ def setup_dirs():
 
 def audit_log(action: str, target: str, status: str, details: Optional[dict] = None):
     """Log action to audit trail."""
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "odoo_accounting",
-        "sub_action": action,
-        "target": target,
-        "result": status,
-        "actor": "odoo_accounting_skill",
-        "details": details or {}
-    }
     try:
-        logs = json.loads(AUDIT_LOG.read_text()) if AUDIT_LOG.exists() else []
-        logs.append(entry)
-        AUDIT_LOG.write_text(json.dumps(logs, indent=2))
-    except Exception as e:
-        print(f"Warning: Audit log failed: {e}", file=sys.stderr)
+        logger.log_action(
+            action_type="odoo_accounting",
+            result=status,
+            target=target,
+            parameters={"sub_action": action},
+            details=details or {},
+            approval_status="not_required",
+        )
+    except Exception:
+        # Never break accounting operations due to logging.
+        pass
+
+
+class OdooJsonRpcClient:
+    """
+    Minimal Odoo JSON-RPC client (Odoo 19+).
+
+    Reference: https://www.odoo.com/documentation/19.0/developer/reference/external_api.html
+    """
+
+    def __init__(self, url: str, db: str, username: str, password: str, timeout_seconds: int = 30):
+        self.url = (url or "").rstrip("/")
+        self.db = db
+        self.username = username
+        self.password = password
+        self.timeout_seconds = timeout_seconds
+        self.uid = self._call("common", "login", [self.db, self.username, self.password])
+        if not self.uid:
+            raise ConnectionError("Failed to authenticate with Odoo (uid is empty)")
+
+    def _call(self, service: str, method: str, args: list) -> Any:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {"service": service, "method": method, "args": args},
+            "id": int(time.time() * 1000),
+        }
+
+        req = urllib.request.Request(
+            f"{self.url}/jsonrpc",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            raise ConnectionError(f"HTTP error from Odoo JSON-RPC: {e.code}") from e
+        except urllib.error.URLError as e:
+            raise ConnectionError(f"Network error contacting Odoo JSON-RPC: {e.reason}") from e
+
+        data = json.loads(raw) if raw else {}
+        if isinstance(data, dict) and data.get("error"):
+            raise RuntimeError(str(data.get("error")))
+        return data.get("result") if isinstance(data, dict) else None
+
+    def execute_kw(self, db: str, uid: int, password: str, model: str, method: str, args: list, kwargs: Optional[dict] = None) -> Any:
+        return self._call("object", "execute_kw", [db, uid, password, model, method, args, kwargs or {}])
 
 
 class OdooAccountingClient:
@@ -80,7 +135,12 @@ class OdooAccountingClient:
         Args:
             mode: 'draft' for cloud (no posting), 'live' for local (with approval)
         """
-        self.mode = mode
+        self.agent_role = os.getenv("AGENT_ROLE", "").strip().lower()
+        requested_mode = mode
+        if self.agent_role == "cloud" and requested_mode != "draft":
+            print("[WARN] Cloud role cannot run live accounting operations. Forcing mode=draft.")
+            requested_mode = "draft"
+        self.mode = requested_mode
         self.dry_run = os.getenv('DRY_RUN', 'true').lower() == 'true'
 
         # Odoo connection settings
@@ -97,16 +157,12 @@ class OdooAccountingClient:
         self._connect()
 
     def _connect(self):
-        """Connect to Odoo XML-RPC API."""
+        """Connect to Odoo JSON-RPC API (hackathon requirement: Odoo 19+ JSON-RPC)."""
         try:
-            common = ServerProxy(f'{self.url}/xmlrpc/2/common')
-            self.uid = common.authenticate(self.db, self.username, self.password, {})
-
-            if not self.uid:
-                raise ConnectionError("Failed to authenticate with Odoo")
-
-            self.models = ServerProxy(f'{self.url}/xmlrpc/2/object')
-            print(f"[OK] Connected to Odoo ({self.mode} mode)")
+            client = OdooJsonRpcClient(self.url, self.db, self.username, self.password)
+            self.uid = client.uid
+            self.models = client
+            print(f"[OK] Connected to Odoo via JSON-RPC ({self.mode} mode)")
 
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Odoo: {e}")
@@ -272,6 +328,12 @@ class OdooAccountingClient:
             'draft_mode': self.mode == 'draft',
             'approval_required': require_approval
         }
+
+        if self.agent_role == "cloud":
+            result['posted'] = False
+            result['error'] = "Cloud role is draft-only for accounting posting. Local approval/execution required."
+            audit_log('post_invoice_blocked', str(invoice_id), 'blocked', {'reason': 'cloud_draft_only'})
+            return result
 
         # Validate invoice
         validation = self.validate_invoice(invoice_id)

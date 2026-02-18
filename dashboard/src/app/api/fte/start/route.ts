@@ -8,6 +8,7 @@ const execAsync = promisify(exec);
 
 const PROJECT_ROOT = process.env.PROJECT_ROOT || path.join(process.cwd(), "..");
 const VAULT_PATH = path.join(PROJECT_ROOT, "AI_Employee_Vault");
+const PYTHON_EXE = process.env.PYTHON_EXE || "python";
 
 export async function POST() {
     try {
@@ -36,7 +37,7 @@ export async function POST() {
             });
         } catch (error) {
             // Fallback: Start orchestrator directly
-            const orchestratorCmd = `python -m src.orchestration.orchestrator`;
+            const orchestratorCmd = `${PYTHON_EXE} -m src.orchestration.orchestrator`;
             exec(orchestratorCmd, { cwd: PROJECT_ROOT }, (error) => {
                 if (error) console.error("Error starting orchestrator:", error);
             });

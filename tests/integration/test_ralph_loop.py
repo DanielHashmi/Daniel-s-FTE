@@ -1,63 +1,78 @@
-import pytest
-import tempfile
-import os
+"""Integration tests for Ralph Wiggum loop state handling."""
+
 from pathlib import Path
-from unittest.mock import Mock, patch
-from src.orchestration.orchestrator import Orchestrator
-from src.orchestration.ralph_loop import RalphLoopManager
+
+from src.lib.state import StateManager
 from src.lib.vault import vault
+from src.orchestration.ralph_loop import RalphLoopManager
 
-@pytest.fixture
-def temp_vault():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        vault.vault_root = Path(tmpdir)
-        vault.init_vault()
-        yield vault
 
-def test_ralph_loop_integration(temp_vault):
-    orchestrator = Orchestrator()
+def _set_temp_vault(workspace_tmp_dir):
+    original = vault.root
+    test_root = workspace_tmp_dir / "AI_Employee_Vault"
+    vault.set_root(str(test_root))
+    vault.ensure_structure()
+    return original
 
-    # Create multi-step action file (Ralph suitable)
-    action_file = temp_vault.get_file_path('needs_action', 'multi-step-task.md')
-    action_file.write_text("""
----
-multi_step: true
-steps:
-  - step1: run command1
-  - step2: run command2
----
-""")
 
-    # Run check_needs_action
-    orchestrator.check_needs_action()
+def test_ralph_suitability_detects_multistep_action(workspace_tmp_dir):
+    original_root = _set_temp_vault(workspace_tmp_dir)
+    try:
+        action_file = vault.write_action(
+            "TASK_multistep.md",
+            (
+                "---\n"
+                "id: act_ralph_1\n"
+                "type: task\n"
+                "source: filesystem\n"
+                "---\n\n"
+                "1. Gather data\n"
+                "2. Analyze results\n"
+                "3. Draft response\n"
+                "4. Request approval\n"
+                "5. Execute final action\n"
+            ),
+            domain="business",
+        )
 
-    # Verify Ralph loop state created
-    state_files = temp_vault.list_files('.claude/state/', '*.json')
-    assert len(state_files) == 1
-    state_file = state_files[0]
+        manager = RalphLoopManager()
+        assert manager.is_suitable_for_ralph(action_file) is True
+    finally:
+        vault.set_root(str(original_root))
+        vault.ensure_structure()
 
-    state_data = json.loads(state_file.read_text())
-    assert 'loop_id' in state_data
-    assert state_data['action_file'] == 'multi-step-task.md'
-    assert state_data['iteration'] == 0
-    assert state_data['status'] == 'active'
 
-def test_ralph_loop_completion(temp_vault):
-    ralph = RalphLoopManager()
+def test_create_loop_for_action_writes_state(workspace_tmp_dir):
+    original_root = _set_temp_vault(workspace_tmp_dir)
+    try:
+        state_dir = workspace_tmp_dir / "ralph_state_runtime"
+        history_dir = workspace_tmp_dir / "ralph_history_runtime"
+        custom_state_manager = StateManager(state_dir=state_dir, history_dir=history_dir)
 
-    # Create loop
-    action_file = temp_vault.get_file_path('needs_action', 'test-task.md')
-    loop_id = ralph.create_loop_for_action(action_file)
-    assert loop_id is not None
+        action_file = vault.write_action(
+            "TASK_loop_state.md",
+            (
+                "---\n"
+                "id: act_ralph_2\n"
+                "type: task\n"
+                "source: filesystem\n"
+                "---\n\n"
+                "Complete all steps and report status.\n"
+            ),
+            domain="business",
+        )
 
-    # Simulate completion by moving to Done
-    done_file = temp_vault.get_file_path('done', 'test-task.md')
-    action_file.rename(done_file)
+        manager = RalphLoopManager()
+        manager.state_manager = custom_state_manager
 
-    # Check completion detection
-    ralph.check_completed_loops()
+        loop_id = manager.create_loop_for_action(action_file)
+        assert loop_id is not None
 
-    # Verify state updated
-    state_file = Path('.claude/state/') / f'{loop_id}.json'
-    state_data = json.loads(state_file.read_text())
-    assert state_data['status'] == 'completed'
+        state_file = state_dir / f"{loop_id}.json"
+        assert state_file.exists()
+        content = state_file.read_text(encoding="utf-8")
+        assert "TASK_COMPLETE" in content
+        assert str(action_file.name) in content
+    finally:
+        vault.set_root(str(original_root))
+        vault.ensure_structure()

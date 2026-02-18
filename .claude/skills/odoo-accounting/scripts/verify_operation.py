@@ -1,92 +1,100 @@
-#!/usr/bin/env python3
-"""Verify Odoo Accounting skill operation and connectivity."""
-import sys
-import os
-from pathlib import Path
+﻿#!/usr/bin/env python3
+"""Verify Odoo Accounting skill operation and connectivity (JSON-RPC)."""
 
-try:
-    import xmlrpc.client
-except ImportError:
-    xmlrpc = None
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Tuple
 
 VAULT_ROOT = Path("AI_Employee_Vault")
 ACCOUNTING_DIR = VAULT_ROOT / "Accounting"
 
 
 def check_odoo_credentials() -> bool:
-    """Check if Odoo credentials are configured."""
-    required = ["ODOO_URL", "ODOO_DB", "ODOO_USER", "ODOO_PASSWORD"]
+    required = ["ODOO_URL", "ODOO_DB", "ODOO_USERNAME", "ODOO_PASSWORD"]
     return all(os.getenv(var) for var in required)
 
 
-def test_odoo_connection():
-    """Test actual Odoo connection if credentials are available."""
+def _jsonrpc(url: str, service: str, method: str, args: list):
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "params": {"service": service, "method": method, "args": args},
+        "id": int(time.time() * 1000),
+    }
+    req = urllib.request.Request(
+        f"{url.rstrip('/')}/jsonrpc",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+    data = json.loads(raw) if raw else {}
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(str(data["error"]))
+    return data.get("result") if isinstance(data, dict) else None
+
+
+def test_odoo_connection() -> Tuple[bool, str]:
     if not check_odoo_credentials():
         return False, "Credentials not configured"
 
-    url = os.getenv("ODOO_URL")
-    db = os.getenv("ODOO_DB")
-    username = os.getenv("ODOO_USER")
-    password = os.getenv("ODOO_PASSWORD")
+    url = str(os.getenv("ODOO_URL") or "").strip()
+    db = str(os.getenv("ODOO_DB") or "").strip()
+    username = str(os.getenv("ODOO_USERNAME") or "").strip()
+    password = str(os.getenv("ODOO_PASSWORD") or "").strip()
 
     try:
-        if xmlrpc is None:
-            return False, "xmlrpc.client not available"
-
-        common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
-        uid = common.authenticate(db, username, password, {})
-
+        uid = _jsonrpc(url, "common", "login", [db, username, password])
         if uid:
-            return True, f"Authenticated as user {uid}"
-        else:
-            return False, "Authentication failed"
+            return True, f"Authenticated via JSON-RPC as uid={uid}"
+        return False, "Authentication failed (uid empty)"
+    except urllib.error.HTTPError as exc:
+        return False, f"HTTP error: {exc.code}"
+    except urllib.error.URLError as exc:
+        return False, f"Network error: {exc.reason}"
+    except Exception as exc:
+        return False, f"Connection error: {exc}"
 
-    except Exception as e:
-        return False, f"Connection error: {str(e)}"
 
-
-def verify():
+def verify() -> int:
     checks = []
 
-    # Check directory exists
-    checks.append(("Accounting directory", ACCOUNTING_DIR.exists()))
+    checks.append(("Accounting directory", ACCOUNTING_DIR.exists(), ""))
 
-    # Check for transaction files
-    tx_files = list(ACCOUNTING_DIR.glob("transactions_*.json"))
-    checks.append(("Transaction files exist", len(tx_files) > 0))
+    tx_files = list((ACCOUNTING_DIR / "transactions").glob("*/*transactions.json"))
+    checks.append(("Transaction files exist", len(tx_files) > 0, f"found={len(tx_files)}"))
 
-    # Check for summary files
     summary_files = list(ACCOUNTING_DIR.glob("summary_*.md"))
-    checks.append(("Summary files exist", len(summary_files) > 0))
+    checks.append(("Summary files exist", len(summary_files) > 0, f"found={len(summary_files)}"))
 
-    # Check Odoo credentials
     has_creds = check_odoo_credentials()
-    checks.append(("Odoo credentials configured", has_creds))
+    checks.append(("Odoo credentials configured", has_creds, ""))
 
-    # Test Odoo connection if credentials configured
     if has_creds:
-        conn_ok, conn_msg = test_odoo_connection()
-        checks.append(("Odoo connection", conn_ok, conn_msg))
+      ok, msg = test_odoo_connection()
+      checks.append(("Odoo JSON-RPC connection", ok, msg))
     else:
-        checks.append(("Odoo credentials", False, "Set ODOO_URL, ODOO_DB, ODOO_USER, ODOO_PASSWORD"))
+      checks.append(("Odoo credentials", False, "Set ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD"))
 
-    # Report results
     all_passed = True
-    for item in checks:
-        name = item[0]
-        passed = item[1]
-        message = item[2] if len(item) > 2 else ""
-
-        status = "✓" if passed else "✗"
-        print(f"{status} {name}")
+    for name, passed, message in checks:
+        status = "PASS" if passed else "FAIL"
+        print(f"{status}: {name}")
         if message:
-            print(f"     {message}")
-
+            print(f"  {message}")
         if not passed:
             all_passed = False
 
-    sys.exit(0 if all_passed else 1)
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":
-    verify()
+    raise SystemExit(verify())
