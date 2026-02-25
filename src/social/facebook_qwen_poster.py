@@ -245,7 +245,7 @@ def post_to_facebook_with_playwright(
     if not composer_url:
         raise RuntimeError("FACEBOOK_COMPOSER_URL is required for live posting.")
 
-    session_dir = Path(os.getenv("FACEBOOK_SESSION_DIR", "facebook_session")).resolve()
+    session_dir = Path(os.getenv("FACEBOOK_SESSION_DIR", "session-data/facebook")).resolve()
     session_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -471,7 +471,7 @@ def prepare_facebook_session() -> Dict[str, Any]:
     if not composer_url:
         raise RuntimeError("FACEBOOK_COMPOSER_URL is required.")
 
-    session_dir = Path(os.getenv("FACEBOOK_SESSION_DIR", "facebook_session")).resolve()
+    session_dir = Path(os.getenv("FACEBOOK_SESSION_DIR", "session-data/facebook")).resolve()
     session_dir.mkdir(parents=True, exist_ok=True)
 
     try:

@@ -16,68 +16,86 @@ Hackathon 0 Platinum implementation: cloud draft agent + local executive agent, 
 
 ## Project Layout
 
-```text
-AI_Employee_Vault/
-  Needs_Action/
-  In_Progress/
-  Plans/
-  Pending_Approval/
-  Approved/
-  Rejected/
-  Signals/
-  Done/
-  Logs/
+High-level structure (see [CODEBASE_STRUCTURE.md](CODEBASE_STRUCTURE.md) for complete details):
 
+```
+bin/                                # Executable scripts & entry points
+config/                             # Configuration files (.env variants)
+src/                                # Main application source code
+  ├── orchestration/               # Vault-based orchestrator
+  ├── skills/                      # AI skill implementations
+  ├── social/                      # Social media posting
+  ├── watchers/                    # Input watchers
+  └── mcp/                         # MCP server integrations
+mcp-servers/                        # External MCP implementations
 dashboard/                          # Next.js operator UI
-src/orchestration/orchestrator.py   # Role-aware orchestrator
-mcp-servers/email-mcp/index.js
-mcp-servers/social-mcp/index.js
-deployment/cloud/odoo-mcp.js
-deployment/cloud/docker-compose.odoo.yml
-deployment/cloud/config/Caddyfile
+deployment/                         # Cloud & Kubernetes configs
+docker/                             # Container definitions
+docs/                               # Documentation
+specs/                              # Tier-based specifications
+history/                            # Decision records & PHRs
+session-data/                       # Browser sessions (gitignored)
+.tmp/                               # Temporary runtime files (gitignored)
+
+AI_Employee_Vault/                  # Core system state & workflow
+  ├── Needs_Action/
+  ├── In_Progress/
+  ├── Pending_Approval/
+  ├── Approved/
+  ├── Rejected/
+  ├── Done/
+  ├── Plans/
+  └── Logs/
 ```
 
 ## Local Quick Start (Windows)
 
-1. Install deps
+1. Install dependencies
 
 ```powershell
 python -m pip install -e .
 python -m playwright install chromium
 ```
 
-2. Configure `.env` from `.env.example`
+2. Configure environment from template
+
+```powershell
+Copy-Item config/.env.example .env
+# Edit .env with your credentials
+```
 
 3. Start dashboard
 
 ```powershell
-START_DASHBOARD.bat
+./bin/START_DASHBOARD.bat
 ```
 
 4. Start local agent
 
 ```powershell
-START_BRAIN_LOCAL.bat
+./bin/START_BRAIN_LOCAL.bat
 ```
 
 5. Start cloud agent (dev mode)
 
 ```powershell
-START_BRAIN_CLOUD.bat
+./bin/START_BRAIN_CLOUD.bat
 ```
 
-## Platinum Gate Validation
+## Validation & Testing
+
+Verify Platinum Tier implementation:
 
 ```powershell
-RUN_PLATINUM_DEMO_GATE.bat
+python scripts/platinum_demo_gate.py
 ```
 
-Expected flow: cloud draft -> local approval -> MCP execution -> audit logs -> `Done/`.
+Expected flow: cloud draft → local approval → MCP execution → audit logs → `Done/`.
 
-Structural checklist:
+Verify structural requirements:
 
 ```powershell
-RUN_HACKATHON_REQUIREMENTS_CHECK.bat
+python scripts/check_hackathon_requirements.py
 ```
 
 ## Cloud Deployment (Odoo + HTTPS + Backup + Health)
@@ -86,10 +104,12 @@ See `deployment/cloud/README.md`.
 
 ## Documentation
 
-- Architecture: `docs/architecture.md`
-- Lessons learned: `docs/lessons-learned.md`
-- Hackathon compliance mapping: `docs/hackathon0-compliance.md`
-- Vault sync playbook: `docs/guides/vault-sync-guide.md`
+- **Project Structure**: See [CODEBASE_STRUCTURE.md](CODEBASE_STRUCTURE.md) for detailed directory layout and file organization
+- **Architecture**: [docs/architecture.md](docs/architecture.md)
+- **Lessons Learned**: [docs/lessons-learned.md](docs/lessons-learned.md)
+- **Hackathon Compliance**: [docs/hackathon0-compliance.md](docs/hackathon0-compliance.md)
+- **Vault Sync Guide**: [docs/guides/vault-sync-guide.md](docs/guides/vault-sync-guide.md)
+- **Hackathon 0 Overview**: [docs/hackathon0-guide.md](docs/hackathon0-guide.md)
 
 ## Security Notes
 

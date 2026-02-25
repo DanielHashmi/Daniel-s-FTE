@@ -21,7 +21,7 @@ class WhatsAppWatcher(BaseWatcher):
         # Safety: WhatsApp can detect robotic intervals. We will apply jitter.
         super().__init__("whatsapp_watcher", interval, domain=os.getenv("WHATSAPP_DOMAIN", "personal"))
         self.headless = headless
-        self.session_path = Path("whatsapp_session")
+        self.session_path = Path("session-data/whatsapp")
         self.browser = None
         self.context = None
         self.page = None

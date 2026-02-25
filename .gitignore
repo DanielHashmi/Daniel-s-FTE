@@ -152,23 +152,23 @@ mcp-servers/node_modules/
 mcp-servers/*.lock
 
 # Browser automation session data (sensitive)
-linkedin_session/
-whatsapp_session/
-facebook_session/
+session-data/
 Microsoft/
-
-# Additional local runtime/session artifacts
-instagram_session/
-instagram_session_corrupt_*/
 .pytest_temp/
 .test_runtime/
 .tmp_test/
+
+# Temporary runtime files and caches
+.tmp/
 runtime-logs/
 pytest-cache-files-*/
 orchestrator_runtime.log
 orchestrator_runtime.out.log
 dashboard_runtime.log
 
-# Local downloaded/scratch docs
-meta_access_tokens.html
-ig_get_started_fb_login.html
+# Deprecated session locations (kept for reference)
+linkedin_session/
+whatsapp_session/
+facebook_session/
+instagram_session/
+instagram_session_corrupt_*/

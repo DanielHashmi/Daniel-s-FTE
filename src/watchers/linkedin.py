@@ -21,7 +21,7 @@ class LinkedInWatcher(BaseWatcher):
         # but here we rely on internal sleeps.
         super().__init__("linkedin_watcher", interval, domain=os.getenv("LINKEDIN_DOMAIN", "business"))
         self.headless = headless
-        self.session_path = Path("linkedin_session")
+        self.session_path = Path("session-data/linkedin")
         self.browser = None
         self.context = None
         self.page = None

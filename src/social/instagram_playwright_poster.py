@@ -1019,7 +1019,7 @@ def post_to_instagram_with_playwright(
         }
 
     composer_url = os.getenv("INSTAGRAM_COMPOSER_URL", "").strip() or "https://www.instagram.com/"
-    session_dir = Path(os.getenv("INSTAGRAM_SESSION_DIR", "instagram_session")).resolve()
+    session_dir = Path(os.getenv("INSTAGRAM_SESSION_DIR", "session-data/instagram")).resolve()
     session_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -1361,7 +1361,7 @@ def post_to_instagram_with_playwright(
 def prepare_instagram_session() -> Dict[str, Any]:
     """Open a persistent browser profile so the user can login once."""
     composer_url = os.getenv("INSTAGRAM_COMPOSER_URL", "").strip() or "https://www.instagram.com/"
-    session_dir = Path(os.getenv("INSTAGRAM_SESSION_DIR", "instagram_session")).resolve()
+    session_dir = Path(os.getenv("INSTAGRAM_SESSION_DIR", "session-data/instagram")).resolve()
     session_dir.mkdir(parents=True, exist_ok=True)
 
     try:
