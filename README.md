@@ -16,7 +16,7 @@ Hackathon 0 Platinum implementation: cloud draft agent + local executive agent, 
 
 ## Project Layout
 
-High-level structure (see [CODEBASE_STRUCTURE.md](CODEBASE_STRUCTURE.md) for complete details):
+High-level structure (see [docs/codebase-structure.md](docs/codebase-structure.md) for complete details):
 
 ```
 bin/                                # Executable scripts & entry points
@@ -104,7 +104,7 @@ See `deployment/cloud/README.md`.
 
 ## Documentation
 
-- **Project Structure**: See [CODEBASE_STRUCTURE.md](CODEBASE_STRUCTURE.md) for detailed directory layout and file organization
+- **Project Structure**: See [docs/codebase-structure.md](docs/codebase-structure.md) for detailed directory layout and file organization
 - **Architecture**: [docs/architecture.md](docs/architecture.md)
 - **Lessons Learned**: [docs/lessons-learned.md](docs/lessons-learned.md)
 - **Hackathon Compliance**: [docs/hackathon0-compliance.md](docs/hackathon0-compliance.md)
