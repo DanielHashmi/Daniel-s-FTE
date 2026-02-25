@@ -1,98 +1,44 @@
 ---
 name: ralph-wiggum-loop
-description: "WHAT: Execute autonomous multi-step tasks until completion using persistent iteration loop. WHEN: User says 'run ralph loop', 'autonomous task', 'complete workflow', 'multi-step task'. Trigger on: complex workflows, batch processing, unattended execution, overnight tasks."
+description: "Execute persistent multi-step orchestration cycles until completion or iteration limit."
 ---
 
-# Ralph Wiggum Loop - Autonomous Task Executor
+# Ralph Wiggum Loop
 
-## When to Use
-- Executing multi-step tasks autonomously (5+ steps)
-- Running unattended batch operations
-- Processing task queues to completion
-- Overnight workflow execution
-- Any task requiring persistence until completion
+Use this skill when you need autonomous iteration over multi-step work with HITL-safe pause behavior.
 
-## How It Works
-1. Creates state file with task prompt
-2. Claude works on the task
-3. Claude attempts to exit
-4. Stop hook checks: Is task complete (file in Done/ or promise output)?
-5. **YES** → Allow exit (success)
-6. **NO** → Block exit, re-inject prompt, continue
-7. Repeat until complete or max iterations reached
+## Command
 
-## Instructions
+```bash
+python .claude/skills/ralph-wiggum-loop/scripts/main_operation.py \
+  --prompt "Process all pending tasks to completion" \
+  --max-iterations 10 \
+  --sleep 2
+```
 
-1. **Start Ralph Loop** (promise-based completion):
-   ```bash
-   python3 .claude/skills/ralph-wiggum-loop/scripts/main_operation.py --action start \
-     --prompt "Process all files in Needs_Action/, move to Done/ when complete" \
-     --completion-promise "TASK_COMPLETE" \
-     --max-iterations 10
-   ```
+Watch-file completion mode:
 
-2. **Start Ralph Loop** (file-movement completion):
-   ```bash
-   python3 .claude/skills/ralph-wiggum-loop/scripts/main_operation.py --action start \
-     --prompt "Process invoice request and send email" \
-     --watch-file "Needs_Action/INVOICE_client_a.md" \
-     --done-folder "Done/" \
-     --max-iterations 10
-   ```
+```bash
+python .claude/skills/ralph-wiggum-loop/scripts/main_operation.py \
+  --prompt "Process invoice workflow end-to-end" \
+  --watch-file "Needs_Action/INVOICE_act_1234.md" \
+  --max-iterations 12 \
+  --sleep 2
+```
 
-3. **Check Loop Status**:
-   ```bash
-   python3 .claude/skills/ralph-wiggum-loop/scripts/main_operation.py --action status
-   ```
+## Behavior
 
-4. **Stop Active Loop**:
-   ```bash
-   python3 .claude/skills/ralph-wiggum-loop/scripts/main_operation.py --action stop --loop-id LOOP_ID
-   ```
-
-5. **View Loop History**:
-   ```bash
-   python3 .claude/skills/ralph-wiggum-loop/scripts/main_operation.py --action history --limit 10
-   ```
-
-## Completion Strategies
-
-### Promise-Based (Simple)
-Claude outputs `<promise>TASK_COMPLETE</promise>` when done.
-- Faster setup
-- Relies on Claude's judgment
-
-### File-Movement (Robust)
-Stop hook detects when task file moves to Done/.
-- More reliable
-- Natural part of existing workflow
-- Recommended for production
-
-## Configuration Options
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--max-iterations` | 10 | Maximum loop cycles |
-| `--timeout` | 3600 | Max seconds per iteration |
-| `--pause-on-approval` | true | Pause when HITL needed |
-| `--auto-resume` | true | Resume after approval |
-| `--log-iterations` | true | Log each iteration |
-
-## State Files
-- `AI_Employee_Vault/Ralph_State/` - Active loop state
-- `AI_Employee_Vault/Ralph_History/` - Completed loop logs
-
-## Safety Features
-- Maximum iteration limit prevents infinite loops
-- Timeout per iteration prevents hangs
-- Automatic HITL pause for sensitive actions
-- Detailed logging for debugging
-- Human review request on max iterations
+- Creates active state under `AI_Employee_Vault/Ralph_State/`
+- Runs one orchestrator cycle per iteration
+- Pauses if `Pending_Approval/` contains items (HITL)
+- Completes when:
+  - watched file leaves active location (watch-file mode), or
+  - workflow queues are empty (queue mode)
+- Archives final state to `AI_Employee_Vault/Ralph_History/`
 
 ## Validation
-- [ ] State file created
-- [ ] Iterations logged
-- [ ] Completion detected correctly
-- [ ] HITL pause working
-- [ ] Max iterations respected
 
-See [REFERENCE.md](./REFERENCE.md) for stop hook implementation.
+- [ ] State file created during run
+- [ ] Iteration count increments
+- [ ] HITL pause occurs when approvals exist
+- [ ] Completed or max-iteration terminal status is written

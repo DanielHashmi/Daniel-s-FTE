@@ -19,12 +19,10 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 class GmailWatcher(BaseWatcher):
     def __init__(self, interval: int = 60):
-        super().__init__("gmail_watcher", interval)
+        super().__init__("gmail_watcher", interval, domain=os.getenv("GMAIL_DOMAIN", "personal"))
         self.service = None
         self.creds = None
-
-        # Load credentials safely (this logic would be extended in production)
-        self._authenticate()
+        self._auth_attempted = False
 
     def _authenticate(self):
         """Authenticate with Gmail API."""
@@ -48,7 +46,8 @@ class GmailWatcher(BaseWatcher):
                 self.creds = None
 
         # If no valid credentials, run OAuth flow
-        if not self.creds and os.path.exists(credentials_path):
+        oauth_enabled = os.getenv("GMAIL_ENABLE_OAUTH_FLOW", "false").lower() == "true"
+        if not self.creds and os.path.exists(credentials_path) and oauth_enabled:
             try:
                 self.logger.info("Starting OAuth flow for Gmail authentication...")
                 self.logger.info("NOTE: If running on WSL/Headless, follow the link in console.")
@@ -63,6 +62,11 @@ class GmailWatcher(BaseWatcher):
             except Exception as e:
                 self.logger.error(f"Failed to complete OAuth flow: {e}")
                 self.creds = None
+        elif not self.creds and os.path.exists(credentials_path) and not oauth_enabled:
+            self.logger.warning(
+                "Gmail credentials missing/expired. "
+                "Set GMAIL_ENABLE_OAUTH_FLOW=true to run the interactive OAuth flow."
+            )
 
         if self.creds:
             try:
@@ -76,6 +80,9 @@ class GmailWatcher(BaseWatcher):
 
     def check_for_updates(self):
         """Check for new unread messages with specific importance."""
+        if not self.service and not self._auth_attempted:
+            self._auth_attempted = True
+            self._authenticate()
         if not self.service:
             # Try to re-auth? Or just log warning once?
             # self.logger.warning("Gmail service not active.")
@@ -101,6 +108,8 @@ class GmailWatcher(BaseWatcher):
     def process_message(self, msg_id: str):
         """Fetch full message details and create action file."""
         try:
+            if msg_id in self.processed_ids:
+                return
             message = self.service.users().messages().get(userId='me', id=msg_id).execute()
 
             headers = message['payload']['headers']
@@ -108,12 +117,21 @@ class GmailWatcher(BaseWatcher):
             sender = next((h['value'] for h in headers if h['name'] == 'From'), '(unknown)')
             snippet = message.get('snippet', '')
 
-            # Create Action File
+            # Classify email to get intelligent priority and tags
+            from src.utils.email_classifier import get_classifier
+            classifier = get_classifier()
+            classification = classifier.classify_email(sender, subject, snippet)
+
+            # Create Action File with intelligent metadata
             metadata = {
                 "sender": sender,
                 "subject": subject,
                 "thread_id": message['threadId'],
-                "msg_id": msg_id
+                "msg_id": msg_id,
+                "tags": classification.get("tags", []),
+                "category": classification.get("category", "notification"),
+                "requires_action": classification.get("requires_action", False),
+                "suggested_action": classification.get("suggested_action", "archive")
             }
 
             content = f"# Incoming Email\n\n**From:** {sender}\n**Subject:** {subject}\n\n## Snippet\n{snippet}\n"
@@ -122,8 +140,9 @@ class GmailWatcher(BaseWatcher):
                 type="email",
                 content=content,
                 metadata=metadata,
-                priority="urgent" # Because we queried for 'important'
+                priority=classification.get("priority", "normal")
             )
+            self.processed_ids.add(msg_id)
 
             # Mark as read so we don't process again?
             # Or store processed IDs in a local DB/file to avoid duplicate processing without modifying server state?

@@ -33,7 +33,7 @@ description: "WHAT: Coordinate operations across Personal and Business domains, 
    ```bash
    python3 .claude/skills/cross-domain-orchestrator/scripts/main_operation.py --action sync-all
    ```
-   *Syncs: Gmail, WhatsApp, LinkedIn, Xero, Social media status*
+   *Syncs: Gmail/WhatsApp queues, Odoo summary, social status*
 
 2. **Domain-Specific Sync**:
    ```bash
@@ -68,14 +68,14 @@ description: "WHAT: Coordinate operations across Personal and Business domains, 
 ## Pre-Built Workflows
 
 ### client-invoice-flow
-1. Check Xero for services rendered
+1. Check Odoo for invoice context
 2. Generate invoice PDF
 3. Send via Gmail
 4. Post LinkedIn update (optional)
 5. Log transaction
 
 ### weekly-business-audit
-1. Sync all Xero data
+1. Sync all Odoo data
 2. Analyze transactions
 3. Check task completion
 4. Generate CEO Briefing

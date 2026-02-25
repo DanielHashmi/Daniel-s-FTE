@@ -59,20 +59,12 @@ def test_skill_is_executable(skill):
         f"{skill['name']} script doesn't have shebang line"
 
 
-def test_all_skills_have_readme():
-    """Test that each skill has a README.md file."""
+def test_all_skills_have_skill_doc():
+    """Test that each skill has SKILL.md documentation."""
     for skill in SKILLS:
         skill_dir = Path(skill["script"]).parent.parent
-        readme = skill_dir / "README.md"
-        assert readme.exists(), f"{skill['name']} missing README.md"
-
-
-def test_all_skills_have_skill_json():
-    """Test that each skill has a skill.json metadata file."""
-    for skill in SKILLS:
-        skill_dir = Path(skill["script"]).parent.parent
-        skill_json = skill_dir / "skill.json"
-        assert skill_json.exists(), f"{skill['name']} missing skill.json"
+        skill_md = skill_dir / "SKILL.md"
+        assert skill_md.exists(), f"{skill['name']} missing SKILL.md"
 
 
 def test_skill_independence():

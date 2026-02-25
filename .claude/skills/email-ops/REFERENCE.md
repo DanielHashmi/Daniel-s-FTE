@@ -5,17 +5,17 @@ Detailed documentation for the email-ops skill in production deployment.
 ## Production Architecture
 
 ### MCP Email Server
-The email operations are provided by the **mcp-email** MCP server, which runs as a separate PM2 process:
-- **Process Name**: mcp-email
-- **Script**: src/mcp/email_server.py
-- **Framework**: FastMCP
+Email sending is provided by a Node-based MCP server:
+- **Name**: email-mcp
+- **Entrypoint**: mcp-servers/email-mcp/index.js
+- **Framework**: @modelcontextprotocol/sdk (stdio transport)
 - **Protocol**: Model Context Protocol (MCP)
 
-The email server provides capabilities for sending emails and checking sent items via the MCP protocol.
+In this repo, the Local executor calls the MCP server via stdio JSON-RPC (`tools/call`) after HITL approval.
 
 ### PM2 Configuration
 
-The email server is configured in `ecosystem.config.js`:
+Optional: run the server under PM2 if you want a long-lived process (not required in the current stdio-per-call setup).
 ```javascript
 {
   name: "mcp-email",

@@ -1,40 +1,61 @@
-# Platinum Tier Quickstart
+# Platinum Tier Quickstart (Cloud + Local)
 
-## 1. Cloud VM Setup (Oracle Free Tier)
-1. Create ARM Ampere A1 instance (4 OCPU, 24GB)
-2. Install Ubuntu 22.04
-3. SSH key auth only
+This quickstart follows the Hackathon 0 Platinum split:
+- Cloud drafts
+- Local approves and executes
 
-## 2. Odoo Deployment
-```
-curl -fsSL https://get.docker.com -o get-docker.com.sh
-sh get-docker.com.sh
-docker run -d -p 8069:8069 --name odoo -v odoo-data:/var/lib/odoo -e POSTGRES_PASSWORD=odoo odoo:19.0
-```
+## 1) Prerequisites
 
-## 3. Clone Repo & PM2
-```
-git clone https://github.com/DanielHashmi/Daniel-s-FTE.git ai-employee
-cd ai-employee
-npm i -g pm2
-pm2 start ecosystem.config.js
-pm2 save
-```
+- Node.js 20+
+- Python 3.12+
+- Qwen CLI (`qwen` / `qwen.cmd`)
+- Playwright Chromium (for browser-session flows)
 
-## 4. Local Setup
-```
-git clone https://github.com/DanielHashmi/Daniel-s-FTE.git ai-employee-local
-cd ai-employee-local
-# Install Syncthing, point to shared vault dir
-syncthing --generate="~/.config/syncthing"
+## 2) Install Dependencies
+
+```powershell
+cd "C:\Users\kk\Desktop\Daniel's FTE"
+python -m pip install -e .
+python -m playwright install chromium
+cd dashboard
+npm install
 ```
 
-## 5. Vault Sync
-- Syncthing folders: `/path/to/AI_Employee_Vault` (bidirectional)
-- Exclude: `.git`, `node_modules`, `.env`
+## 3) Configure `.env`
 
-## 6. Test Handover
-1. Kill local agent
-2. Send test email
-3. Verify cloud draft in /Pending_Approval
-4. Restart local, approve, verify execution
+Start from `.env.example` and set at least:
+
+```bash
+DRY_RUN=true
+REASONING_ENGINE=qwen
+AGENT_ROLE=local
+AGENT_ID=local-agent-001
+STRICT_WORK_ZONES=true
+```
+
+## 4) Start Local Surfaces
+
+```powershell
+START_DASHBOARD.bat
+START_BRAIN_LOCAL.bat
+```
+
+## 5) Start Cloud Drafter (dev host or VM)
+
+```powershell
+START_BRAIN_CLOUD.bat
+```
+
+## 6) Run Platinum Gate
+
+```powershell
+RUN_PLATINUM_DEMO_GATE.bat
+```
+
+Expected: cloud draft -> local approve -> MCP execute -> logs -> `Done/`.
+
+## 7) Optional Cloud Odoo Deployment
+
+Use:
+- `deployment/cloud/README.md`
+- `deployment/cloud/docker-compose.odoo.yml`

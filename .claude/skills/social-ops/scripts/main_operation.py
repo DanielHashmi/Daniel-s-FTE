@@ -1,135 +1,154 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
+"""social-ops skill
+
+Silver/Gold tier expectation:
+- Create LinkedIn (and other) social posts via HITL approval files
+- Local executor posts via MCP after approval
+
+This skill can:
+- create a Pending_Approval item (default)
+- optionally post immediately via social-mcp (use with care)
+"""
+
+from __future__ import annotations
+
 import argparse
-import sys
-import json
 import os
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
-import difflib
+from typing import Dict, Any, Optional
 
-# Config
-VAULT_ROOT = Path("AI_Employee_Vault")
-LOGS_DIR = VAULT_ROOT / "Logs"
-DRY_RUN_LOG = LOGS_DIR / "LinkedIn_Dry_Run.log"
-AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+import yaml
 
-def setup_dirs():
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+os.chdir(PROJECT_ROOT)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-def audit_log(action, result, details=None):
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "social_op",
-        "sub_action": action,
-        "target": "linkedin",
-        "result": result,
-        "actor": "social_ops_skill",
-        "details": details or {}
+from src.lib.logging import get_logger
+from src.lib.vault import vault
+from src.mcp.stdio_client import call_node_mcp_tool
+
+logger = get_logger("social_ops_skill")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _env_for_actions() -> Dict[str, str]:
+    env = {**os.environ}
+    if os.getenv("DEV_MODE", "false").lower() == "true":
+        env["DRY_RUN"] = "true"
+    return env
+
+
+def _write_pending_approval(platform: str, content: str, domain: str = "business") -> Path:
+    vault.ensure_structure()
+
+    ts = int(time.time())
+    filename = f"{ts}_SOCIAL_{platform}_manual.md"
+
+    frontmatter: Dict[str, Any] = {
+        "type": "approval_request",
+        "action": "social_post",
+        "platform": platform,
+        "created": _utc_now_iso(),
+        "status": "pending",
+        "domain": domain,
+        "source_action_id": f"manual_{ts}",
     }
 
-    try:
-        if AUDIT_LOG.exists():
-            with open(AUDIT_LOG, 'r') as f:
-                logs = json.load(f)
-        else:
-            logs = []
-        logs.append(entry)
-        with open(AUDIT_LOG, 'w') as f:
-            json.dump(logs, f, indent=2)
-    except Exception as e:
-        print(f"Warning: Audit log failed: {e}", file=sys.stderr)
+    body = (
+        f"# Social Post Approval Request ({platform})\n\n"
+        "## Content\n"
+        f"{content.strip()}\n\n"
+        "---\n\n"
+        "Move this file to `Approved/` to post, or `Rejected/` to cancel.\n"
+    )
 
-def check_duplicates(content):
-    if not DRY_RUN_LOG.exists():
-        return False
+    dir_path = vault.get_domain_dir("pending_approval", domain)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    path = dir_path / filename
+    path.write_text("---\n" + yaml.safe_dump(frontmatter, sort_keys=False).strip() + "\n---\n\n" + body, encoding="utf-8")
 
-    with open(DRY_RUN_LOG, 'r') as f:
-        posts = [line.split('| Content: ')[1].strip() for line in f if '| Content: ' in line]
+    logger.log_action(
+        action_type="social_approval_created",
+        result="success",
+        target=str(path),
+        parameters={"platform": platform},
+        approval_status="pending",
+    )
 
-    for post in posts:
-        # Simple simulation of 80% similarity check
-        ratio = difflib.SequenceMatcher(None, content, post).ratio()
-        if ratio > 0.8:
-            return True
-    return False
+    return path
 
-def post_update(content):
-    if check_duplicates(content):
-        print("✗ Duplicate content detected (>80% similar to recent post). Post rejected.")
-        audit_log("post", "rejected_duplicate", {"content_preview": content[:50]})
-        return False
 
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
+def _post_now(platform: str, content: str, visibility: str = "PUBLIC") -> int:
+    mcp_path = Path("mcp-servers/social-mcp/index.js")
+    if not mcp_path.exists():
+        raise FileNotFoundError(f"social-mcp server not found: {mcp_path}")
 
-    if dry_run:
-        timestamp = datetime.now().isoformat()
-        log_entry = f"[{timestamp}] [DRY RUN] Status: Posted | Content: {content}\n"
-        with open(DRY_RUN_LOG, 'a') as f:
-            f.write(log_entry)
+    tool_map = {
+        "twitter": "post_to_twitter",
+        "linkedin": "post_to_linkedin",
+        "facebook": "post_to_facebook",
+    }
+    tool = tool_map.get(platform)
+    if not tool:
+        raise ValueError(f"Unsupported platform: {platform}")
 
-        print("✓ Post logged (DRY RUN)")
-        audit_log("post", "success (dry_run)", {"content_preview": content[:50]})
-        return True
+    args: Dict[str, Any] = {"content": content}
+    if platform == "linkedin":
+        args["visibility"] = visibility
 
-    print("✗ Real LinkedIn posting not configured. Enable DRY_RUN=true")
-    return False
+    res = call_node_mcp_tool(
+        entrypoint=mcp_path,
+        tool_name=tool,
+        arguments=args,
+        timeout_seconds=int(os.getenv("MCP_TIMEOUT_SECONDS", "60")),
+        env=_env_for_actions(),
+    )
 
-def schedule_post(content, time_str):
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
+    if not res.ok:
+        raise RuntimeError(res.stderr or res.stdout or "MCP call failed")
 
-    if dry_run:
-        timestamp = datetime.now().isoformat()
-        log_entry = f"[{timestamp}] [DRY RUN] Status: Scheduled ({time_str}) | Content: {content}\n"
-        with open(DRY_RUN_LOG, 'a') as f:
-            f.write(log_entry)
+    logger.log_action(
+        action_type=f"{platform}_post",
+        result="success",
+        target=platform,
+        parameters={"content_preview": content[:120]},
+        approval_status="approved",
+        approved_by="policy",
+    )
 
-        print(f"✓ Post scheduled for {time_str} (DRY RUN)")
-        audit_log("schedule", "success (dry_run)", {"time": time_str})
-        return True
+    return 0
 
-    print("✗ Real LinkedIn scheduling not configured")
-    return False
 
-def list_recent(limit):
-    if not DRY_RUN_LOG.exists():
-        print("No recent posts found.")
-        return
-
-    print(f"Recent LinkedIn activity (from {DRY_RUN_LOG}):")
-    print("-" * 60)
-
-    with open(DRY_RUN_LOG, 'r') as f:
-        lines = f.readlines()
-
-    for line in lines[-limit:]:
-        print(line.strip())
-
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Social operations")
-    parser.add_argument("--action", required=True, choices=["post", "schedule", "list-recent"])
-    parser.add_argument("--content", help="Post content")
-    parser.add_argument("--time", help="Schedule time (ISO8601)")
-    parser.add_argument("--limit", type=int, default=5)
+    parser.add_argument("--action", required=True, choices=["request", "post-now"])
+    parser.add_argument("--platform", required=True, choices=["linkedin", "twitter", "facebook"])
+    parser.add_argument("--content", required=True, help="Post content")
+    parser.add_argument("--domain", default=os.getenv("SOCIAL_DOMAIN", "business"))
+    parser.add_argument("--visibility", default="PUBLIC", choices=["PUBLIC", "CONNECTIONS"])
 
     args = parser.parse_args()
-    setup_dirs()
+    vault.ensure_structure()
 
-    if args.action == "post":
-        if not args.content:
-            print("Error: --content required for post")
-            sys.exit(1)
-        if not post_update(args.content):
-            sys.exit(1)
+    platform = str(args.platform).strip().lower()
 
-    elif args.action == "schedule":
-        if not args.content or not args.time:
-            print("Error: --content and --time required for schedule")
-            sys.exit(1)
-        if not schedule_post(args.content, args.time):
-            sys.exit(1)
+    if args.action == "request":
+        path = _write_pending_approval(platform, args.content, domain=str(args.domain).strip().lower() or "business")
+        print(str(path))
+        return 0
 
-    elif args.action == "list-recent":
-        list_recent(args.limit)
+    if args.action == "post-now":
+        return _post_now(platform, args.content, visibility=args.visibility)
+
+    return 1
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

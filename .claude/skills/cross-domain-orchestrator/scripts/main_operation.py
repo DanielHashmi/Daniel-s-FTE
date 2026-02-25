@@ -1,358 +1,335 @@
-#!/usr/bin/env python3
-"""Cross-Domain Orchestrator - Gold Tier Skill
+﻿#!/usr/bin/env python3
+"""cross-domain-orchestrator skill
 
-Coordinate operations across Personal and Business domains,
-manage workflow dependencies, and orchestrate multi-system tasks.
+Coordinate workflows across Personal and Business domains using existing skills.
+This implementation executes real skill scripts (or prints commands in dry-run mode).
 """
+
+from __future__ import annotations
+
 import argparse
-import sys
 import json
 import os
 import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-# Config
-VAULT_ROOT = Path("AI_Employee_Vault")
-CONFIG_DIR = VAULT_ROOT / "Config"
-LOGS_DIR = VAULT_ROOT / "Logs"
-AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+os.chdir(PROJECT_ROOT)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Domain definitions
-DOMAINS = {
-    "personal": {
-        "components": ["gmail", "whatsapp", "calendar"],
-        "skills": ["email-ops", "watcher-manager"]
-    },
-    "business": {
-        "components": ["odoo", "linkedin", "facebook", "instagram", "twitter"],
-        "skills": ["odoo-accounting", "social-ops", "social-media-suite"]
-    }
-}
+from src.lib.logging import get_logger
 
-# Pre-built workflows
-WORKFLOWS = {
-    "client-invoice-flow": {
-        "description": "Generate and send invoice to client",
-        "steps": [
-            {"action": "odoo-accounting", "command": "--action invoices --status unpaid"},
-            {"action": "generate-invoice", "template": "invoice"},
-            {"action": "email-ops", "command": "--action send --attachment invoice.pdf"},
-            {"action": "social-ops", "command": "--action post --message 'Thanks for your business!'"},
-            {"action": "audit-log", "event": "invoice_sent"}
-        ]
-    },
-    "weekly-business-audit": {
-        "description": "Full weekly business audit and CEO briefing",
-        "steps": [
-            {"action": "odoo-accounting", "command": "--action sync"},
-            {"action": "odoo-accounting", "command": "--action summary --period weekly"},
-            {"action": "ceo-briefing", "command": "--action generate"},
-            {"action": "email-ops", "command": "--action send --subject 'Weekly CEO Briefing'"}
-        ]
-    },
-    "social-media-campaign": {
-        "description": "Multi-platform social media posting",
-        "steps": [
-            {"action": "social-media-suite", "command": "--platform all --action post"},
-            {"action": "wait-for-approval", "timeout": 3600},
-            {"action": "social-media-suite", "command": "--action summary --days 1"}
-        ]
-    }
+logger = get_logger("cross_domain_orchestrator_skill")
+VAULT_ROOT = PROJECT_ROOT / "AI_Employee_Vault"
+
+SCRIPT_PATHS = {
+    "process_inbox": PROJECT_ROOT / ".claude" / "skills" / "process-inbox" / "scripts" / "main_operation.py",
+    "odoo_accounting": PROJECT_ROOT / ".claude" / "skills" / "odoo-accounting" / "scripts" / "main_operation.py",
+    "ceo_briefing": PROJECT_ROOT / ".claude" / "skills" / "ceo-briefing" / "scripts" / "main_operation.py",
+    "social_media_suite": PROJECT_ROOT / ".claude" / "skills" / "social-media-suite" / "scripts" / "main_operation.py",
+    "watcher_manager": PROJECT_ROOT / ".claude" / "skills" / "watcher-manager" / "scripts" / "main_operation.py",
 }
 
 
-def setup_dirs():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def audit_log(action: str, target: str, status: str, details: Optional[dict] = None):
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "cross_domain_orchestrator",
-        "sub_action": action,
-        "target": target,
-        "result": status,
-        "actor": "cross_domain_orchestrator_skill",
-        "details": details or {}
-    }
-    try:
-        logs = json.loads(AUDIT_LOG.read_text()) if AUDIT_LOG.exists() else []
-        logs.append(entry)
-        AUDIT_LOG.write_text(json.dumps(logs, indent=2))
-    except Exception as e:
-        print(f"Warning: Audit log failed: {e}", file=sys.stderr)
-
-
-def check_component_health(component: str) -> dict:
-    """Check health of a single component."""
-    health_checks = {
-        "gmail": lambda: os.path.exists(os.path.expanduser("~/.gmail_credentials.json")),
-        "whatsapp": lambda: os.path.exists(os.path.expanduser("~/.whatsapp_session")),
-        "odoo": lambda: bool(os.getenv("XERO_CLIENT_ID")),
-        "linkedin": lambda: bool(os.getenv("LINKEDIN_ACCESS_TOKEN")),
-        "facebook": lambda: bool(os.getenv("META_ACCESS_TOKEN")),
-        "instagram": lambda: bool(os.getenv("INSTAGRAM_BUSINESS_ID")),
-        "twitter": lambda: bool(os.getenv("TWITTER_API_KEY")),
-        "calendar": lambda: True,  # Always available (local)
-    }
-
-    check_fn = health_checks.get(component, lambda: True)
-    try:
-        is_healthy = check_fn()
-        return {
-            "component": component,
-            "status": "healthy" if is_healthy else "unconfigured",
-            "checked_at": datetime.now().isoformat()
-        }
-    except Exception as e:
-        return {
-            "component": component,
-            "status": "error",
-            "error": str(e),
-            "checked_at": datetime.now().isoformat()
-        }
-
-
-def sync_all():
-    """Sync all domains and components."""
-    print("Full System Sync")
-    print("=" * 50)
-
-    results = {"personal": {}, "business": {}}
-
-    for domain, config in DOMAINS.items():
-        print(f"\n{domain.upper()} DOMAIN")
-        print("-" * 30)
-
-        for component in config["components"]:
-            health = check_component_health(component)
-            status_emoji = "✓" if health["status"] == "healthy" else "✗"
-            print(f"  {status_emoji} {component}: {health['status']}")
-            results[domain][component] = health
-
-    # Run skill syncs
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
-
+def _run_python(
+    script_path: Path,
+    args: List[str],
+    *,
+    dry_run: bool,
+    env_overrides: Optional[Dict[str, str]] = None,
+) -> Tuple[int, str, str]:
+    cmd = [sys.executable, str(script_path), *args]
     if dry_run:
-        print("\n[DRY RUN] Would execute:")
-        print("  - odoo-accounting --action sync")
-        print("  - social-media-suite --action status")
-    else:
-        # Execute real syncs
-        pass
+        print(f"[DRY RUN] {' '.join(cmd)}")
+        return 0, "", ""
 
-    audit_log("sync_all", "all_domains", "success", results)
-    print("\n✓ System sync complete")
-    return True
+    env = dict(os.environ)
+    if env_overrides:
+        env.update({k: str(v) for k, v in env_overrides.items()})
 
-
-def sync_domain(domain: str):
-    """Sync a specific domain."""
-    if domain not in DOMAINS:
-        print(f"✗ Unknown domain: {domain}")
-        return False
-
-    print(f"Syncing {domain.upper()} domain...")
-
-    config = DOMAINS[domain]
-    for component in config["components"]:
-        health = check_component_health(component)
-        status_emoji = "✓" if health["status"] == "healthy" else "✗"
-        print(f"  {status_emoji} {component}: {health['status']}")
-
-    audit_log("sync_domain", domain, "success")
-    print(f"\n✓ {domain.capitalize()} domain sync complete")
-    return True
+    result = subprocess.run(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip(), file=sys.stderr)
+    return result.returncode, result.stdout, result.stderr
 
 
-def run_schedule(schedule: str):
-    """Run scheduled coordination tasks."""
-    schedules = {
-        "daily": ["sync_all"],
-        "weekly": ["sync_all", "weekly-business-audit"],
-        "monthly": ["sync_all", "weekly-business-audit", "generate-reports"]
+def _check_paths() -> List[str]:
+    missing = []
+    for name, p in SCRIPT_PATHS.items():
+        if not p.exists():
+            missing.append(f"{name}: {p}")
+    return missing
+
+
+def _health_checks() -> Dict[str, Any]:
+    env = os.environ
+    checks: Dict[str, Any] = {
+        "vault_exists": VAULT_ROOT.exists(),
+        "odoo_env": bool(env.get("ODOO_URL") and env.get("ODOO_DB") and env.get("ODOO_USERNAME") and env.get("ODOO_PASSWORD")),
+        "twitter_env": bool(env.get("TWITTER_API_KEY") and env.get("TWITTER_ACCESS_TOKEN")),
+        "linkedin_env": bool(env.get("LINKEDIN_ACCESS_TOKEN") and env.get("LINKEDIN_AUTHOR_URN")),
+        "facebook_env": bool(env.get("FACEBOOK_PAGE_TOKEN") and env.get("FACEBOOK_PAGE_ID")),
+        "instagram_env": bool(env.get("INSTAGRAM_ACCESS_TOKEN") and env.get("INSTAGRAM_BUSINESS_ID")),
     }
+    checks["missing_skill_scripts"] = _check_paths()
+    return checks
 
-    if schedule not in schedules:
-        print(f"✗ Unknown schedule: {schedule}")
+
+def sync_domain(domain: str, dry_run: bool) -> bool:
+    if domain not in {"personal", "business"}:
+        print(f"Unknown domain: {domain}", file=sys.stderr)
         return False
 
-    tasks = schedules[schedule]
-    print(f"Running {schedule.upper()} schedule...")
-    print(f"Tasks: {', '.join(tasks)}")
+    print(f"Syncing domain: {domain}")
 
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
+    # Process inbox/plans for this domain role.
+    agent_role = "local" if domain == "personal" else "cloud"
+    agent_id = "local-agent-001" if domain == "personal" else "cloud-agent-001"
 
-    for task in tasks:
-        print(f"\n  → {task}")
-        if dry_run:
-            print(f"    [DRY RUN] Would execute: {task}")
-        else:
-            # Execute task
-            pass
-
-    audit_log("run_schedule", schedule, "success", {"tasks": tasks})
-    print(f"\n✓ {schedule.capitalize()} schedule complete")
-    return True
-
-
-def check_health():
-    """Check health of all integrated systems."""
-    print("System Health Check")
-    print("=" * 50)
-
-    all_healthy = True
-
-    for domain, config in DOMAINS.items():
-        print(f"\n{domain.upper()} DOMAIN")
-        print("-" * 30)
-
-        for component in config["components"]:
-            health = check_component_health(component)
-            status_emoji = "✓" if health["status"] == "healthy" else "✗"
-            print(f"  {status_emoji} {component}: {health['status']}")
-
-            if health["status"] != "healthy":
-                all_healthy = False
-
-    # Check skill availability
-    print("\nSKILLS")
-    print("-" * 30)
-    skill_dir = Path(".claude/skills")
-    for skill in ["odoo-accounting", "social-media-suite", "ceo-briefing", "ralph-wiggum-loop"]:
-        skill_path = skill_dir / skill / "SKILL.md"
-        exists = skill_path.exists()
-        status_emoji = "✓" if exists else "✗"
-        print(f"  {status_emoji} {skill}")
-        if not exists:
-            all_healthy = False
-
-    overall = "✓ All systems healthy" if all_healthy else "⚠️ Some systems need attention"
-    print(f"\n{overall}")
-    return all_healthy
-
-
-def run_workflow(workflow_name: str, params: Optional[dict] = None):
-    """Execute a pre-built workflow."""
-    if workflow_name not in WORKFLOWS:
-        print(f"✗ Unknown workflow: {workflow_name}")
-        print(f"  Available: {', '.join(WORKFLOWS.keys())}")
+    code, _, _ = _run_python(
+        SCRIPT_PATHS["process_inbox"],
+        ["--agent-role", agent_role, "--agent-id", agent_id, "--max-files", "10", "--update-dashboard"],
+        dry_run=dry_run,
+    )
+    if code != 0:
         return False
 
-    workflow = WORKFLOWS[workflow_name]
-    print(f"Executing Workflow: {workflow_name}")
-    print(f"Description: {workflow['description']}")
-    print(f"Steps: {len(workflow['steps'])}")
-    print("-" * 50)
+    # Domain-specific syncs.
+    if domain == "business":
+        # Odoo summary in draft mode (safe for cloud side).
+        code, _, _ = _run_python(
+            SCRIPT_PATHS["odoo_accounting"],
+            ["--mode", "draft", "summary", "--limit", "50"],
+            dry_run=dry_run,
+        )
+        if code != 0:
+            return False
 
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
+    logger.log_action(
+        action_type="cross_domain_sync",
+        result="success",
+        target=domain,
+        details={"agent_role": agent_role, "timestamp": _utc_now_iso()},
+        approval_status="not_required",
+    )
+    return True
 
-    for i, step in enumerate(workflow["steps"], 1):
-        action = step.get("action", "unknown")
-        command = step.get("command", "")
 
-        print(f"\n[{i}/{len(workflow['steps'])}] {action}")
+def sync_all(dry_run: bool) -> bool:
+    ok_personal = sync_domain("personal", dry_run=dry_run)
+    ok_business = sync_domain("business", dry_run=dry_run)
+    return ok_personal and ok_business
 
+
+def run_schedule(schedule: str, dry_run: bool) -> bool:
+    if schedule not in {"daily", "weekly", "monthly"}:
+        print(f"Unknown schedule: {schedule}", file=sys.stderr)
+        return False
+
+    print(f"Running schedule: {schedule}")
+    if not sync_all(dry_run=dry_run):
+        return False
+
+    if schedule in {"weekly", "monthly"}:
+        code, _, _ = _run_python(
+            SCRIPT_PATHS["ceo_briefing"],
+            ["--action", "generate"],
+            dry_run=dry_run,
+        )
+        if code != 0:
+            return False
+
+    logger.log_action(
+        action_type="cross_domain_schedule",
+        result="success",
+        target=schedule,
+        details={"dry_run": dry_run},
+        approval_status="not_required",
+    )
+    return True
+
+
+def _write_pending_email_approval(params: Dict[str, Any]) -> Path:
+    pending = VAULT_ROOT / "Pending_Approval" / "business"
+    pending.mkdir(parents=True, exist_ok=True)
+    ts = int(datetime.now(timezone.utc).timestamp())
+    to = str(params.get("to") or params.get("client_email") or "")
+    subject = str(params.get("subject") or "Invoice Update")
+    body = str(params.get("body") or "Please find your invoice details attached.")
+
+    filename = f"{ts}_EMAIL_cross_domain_invoice.md"
+    path = pending / filename
+    content = (
+        "---\n"
+        "type: approval_request\n"
+        "action: send_email\n"
+        "domain: business\n"
+        f"created: {_utc_now_iso()}\n"
+        "status: pending\n"
+        f"to: {to}\n"
+        f"subject: {subject}\n"
+        "---\n\n"
+        "# Email Draft\n\n"
+        "## Content\n"
+        f"{body}\n\n"
+        "Move to `Approved/` to execute, or `Rejected/` to cancel.\n"
+    )
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def run_workflow(workflow_name: str, params: Optional[Dict[str, Any]], dry_run: bool) -> bool:
+    params = params or {}
+    name = workflow_name.strip().lower()
+
+    if name == "client-invoice-flow":
+        # 1) Pull Odoo draft summary
+        code, _, _ = _run_python(
+            SCRIPT_PATHS["odoo_accounting"],
+            ["--mode", "draft", "summary", "--limit", "25"],
+            dry_run=dry_run,
+        )
+        if code != 0:
+            return False
+
+        # 2) Create HITL email approval draft for client communication.
         if dry_run:
-            print(f"  [DRY RUN] Would execute: {action} {command}")
+            print("[DRY RUN] Would create Pending_Approval/business email draft")
         else:
-            # Execute step
-            pass
+            approval = _write_pending_email_approval(params)
+            print(f"Created approval draft: {approval}")
 
-    audit_log("workflow", workflow_name, "success", {"params": params})
-    print(f"\n✓ Workflow '{workflow_name}' complete")
+    elif name == "weekly-business-audit":
+        return run_schedule("weekly", dry_run=dry_run)
+
+    elif name == "social-media-campaign":
+        message = str(params.get("message") or "Weekly business update")
+        code, _, _ = _run_python(
+            SCRIPT_PATHS["social_media_suite"],
+            ["--action", "post", "--platform", "all", "--message", message, "--domain", "business"],
+            dry_run=dry_run,
+        )
+        if code != 0:
+            return False
+
+    else:
+        print(f"Unknown workflow: {workflow_name}", file=sys.stderr)
+        return False
+
+    logger.log_action(
+        action_type="cross_domain_workflow",
+        result="success",
+        target=name,
+        details={"params": params, "dry_run": dry_run},
+        approval_status="not_required",
+    )
     return True
 
 
-def show_integration_map():
-    """Display integration map of all systems."""
-    print("Cross-Domain Integration Map")
-    print("=" * 60)
-
-    print("""
-┌─────────────────────────────────────────────────────────────┐
-│                    AI EMPLOYEE SYSTEM                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  PERSONAL DOMAIN            BUSINESS DOMAIN                  │
-│  ┌─────────────────┐       ┌─────────────────────────────┐  │
-│  │ Gmail           │       │ Odoo (Accounting)           │  │
-│  │ WhatsApp        │◄─────►│ LinkedIn                    │  │
-│  │ Calendar        │       │ Facebook/Instagram/Twitter  │  │
-│  └─────────────────┘       └─────────────────────────────┘  │
-│           │                           │                      │
-│           │                           │                      │
-│           ▼                           ▼                      │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              ORCHESTRATION LAYER                      │   │
-│  │   • Cross-domain coordination                         │   │
-│  │   • Workflow management                               │   │
-│  │   • Schedule execution                                │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                           │                                  │
-│                           ▼                                  │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              SKILLS LAYER                             │   │
-│  │   • odoo-accounting    • ceo-briefing                 │   │
-│  │   • social-media-suite • ralph-wiggum-loop            │   │
-│  │   • error-recovery     • audit-logger                 │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-""")
-
-    # List available workflows
-    print("\nAvailable Workflows:")
-    for name, workflow in WORKFLOWS.items():
-        print(f"  • {name}: {workflow['description']}")
-
+def show_map() -> bool:
+    print("Cross-domain Integration Map")
+    print("-" * 60)
+    print("Personal domain: Gmail, WhatsApp, local approvals, final execution")
+    print("Business domain: Odoo, social drafts, CEO briefing")
+    print("Shared queues:")
+    print("  Needs_Action/<domain> -> In_Progress/<agent> -> Plans/<domain>")
+    print("  Pending_Approval/<domain> -> Approved|Rejected -> Done")
+    print("Signals: Cloud writes to Signals/, Local merges into Dashboard")
     return True
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Cross-Domain Orchestrator")
-    parser.add_argument("--action", required=True,
-                       choices=["sync-all", "sync", "run-schedule", "health", "workflow", "map"])
-    parser.add_argument("--domain", choices=["personal", "business"], help="Domain for sync")
-    parser.add_argument("--schedule", choices=["daily", "weekly", "monthly"])
-    parser.add_argument("--workflow", help="Workflow name to execute")
+def check_health() -> bool:
+    checks = _health_checks()
+
+    print("System Health")
+    print("-" * 60)
+    for key, value in checks.items():
+        if key == "missing_skill_scripts":
+            status = "ok" if not value else f"missing({len(value)})"
+            print(f"{key}: {status}")
+            if value:
+                for item in value:
+                    print(f"  - {item}")
+        else:
+            print(f"{key}: {'ok' if value else 'not_configured'}")
+
+    healthy = bool(checks.get("vault_exists")) and not checks.get("missing_skill_scripts")
+    logger.log_action(
+        action_type="cross_domain_health",
+        result="success" if healthy else "warning",
+        target="system",
+        details=checks,
+        approval_status="not_required",
+    )
+    return healthy
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Cross-domain orchestration skill")
+    parser.add_argument("--action", required=True, choices=["sync-all", "sync", "run-schedule", "health", "workflow", "map"])
+    parser.add_argument("--domain", choices=["personal", "business"], help="Domain for --action sync")
+    parser.add_argument("--schedule", choices=["daily", "weekly", "monthly"], help="Schedule for --action run-schedule")
+    parser.add_argument("--workflow", help="Workflow name for --action workflow")
     parser.add_argument("--params", help="JSON params for workflow")
-
+    parser.add_argument("--dry-run", action="store_true", help="Show commands without executing")
     args = parser.parse_args()
-    setup_dirs()
+
+    dry_run = args.dry_run or (os.getenv("DRY_RUN", "true").lower() == "true")
 
     if args.action == "sync-all":
-        sync_all()
+        return 0 if sync_all(dry_run=dry_run) else 1
 
-    elif args.action == "sync":
+    if args.action == "sync":
         if not args.domain:
-            print("Error: --domain required for sync action")
-            sys.exit(1)
-        sync_domain(args.domain)
+            print("--domain is required for --action sync", file=sys.stderr)
+            return 1
+        return 0 if sync_domain(args.domain, dry_run=dry_run) else 1
 
-    elif args.action == "run-schedule":
+    if args.action == "run-schedule":
         if not args.schedule:
-            print("Error: --schedule required for run-schedule action")
-            sys.exit(1)
-        run_schedule(args.schedule)
+            print("--schedule is required for --action run-schedule", file=sys.stderr)
+            return 1
+        return 0 if run_schedule(args.schedule, dry_run=dry_run) else 1
 
-    elif args.action == "health":
-        if not check_health():
-            sys.exit(1)
+    if args.action == "health":
+        return 0 if check_health() else 1
 
-    elif args.action == "workflow":
+    if args.action == "workflow":
         if not args.workflow:
-            print("Error: --workflow required for workflow action")
-            sys.exit(1)
-        params = json.loads(args.params) if args.params else None
-        run_workflow(args.workflow, params)
+            print("--workflow is required for --action workflow", file=sys.stderr)
+            return 1
+        params: Optional[Dict[str, Any]] = None
+        if args.params:
+            try:
+                params = json.loads(args.params)
+                if not isinstance(params, dict):
+                    raise ValueError("--params must decode to a JSON object")
+            except Exception as exc:
+                print(f"Invalid --params JSON: {exc}", file=sys.stderr)
+                return 1
+        return 0 if run_workflow(args.workflow, params=params, dry_run=dry_run) else 1
 
-    elif args.action == "map":
-        show_integration_map()
+    if args.action == "map":
+        return 0 if show_map() else 1
+
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

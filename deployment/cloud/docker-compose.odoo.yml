@@ -1,79 +1,97 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  odoo:
-    image: odoo:17.0
-    container_name: odoo-enterprise
-    ports:
-      - "8069:8069"
+  db:
+    image: postgres:16
+    container_name: daniel-fte-odoo-db
+    restart: unless-stopped
     environment:
-      - HOST=db
-      - USER=odoo
-      - PASSWORD=odoo_password
-      - DB_PORT_5432_TCP_ADDR=db
+      POSTGRES_DB: ${ODOO_POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${ODOO_POSTGRES_USER:-odoo}
+      POSTGRES_PASSWORD: ${ODOO_POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - db-data:/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ODOO_POSTGRES_USER:-odoo} -d ${ODOO_POSTGRES_DB:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - odoo-net
+
+  odoo:
+    image: ${ODOO_IMAGE:-odoo:19.0}
+    container_name: daniel-fte-odoo
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: ${ODOO_POSTGRES_USER:-odoo}
+      PASSWORD: ${ODOO_POSTGRES_PASSWORD}
+      DB_NAME: ${ODOO_POSTGRES_DB:-postgres}
     volumes:
       - odoo-data:/var/lib/odoo
       - ./config:/etc/odoo
       - ./addons:/mnt/extra-addons
-    depends_on:
-      - db
-    restart: unless-stopped
+    expose:
+      - "8069"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8069/web/login', timeout=5)\""]
+      interval: 20s
+      timeout: 10s
+      retries: 10
     networks:
-      - odoo-network
-    labels:
-      - "com.anthropic.agent=odoo"
-      - "com.anthronic.tier=platinum"
-
-  db:
-    image: postgres:15
-    container_name: postgres-odoo
-    environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo_password
-      - POSTGRES_USER=odoo
-      - PGDATA=/var/lib/postgresql/data/pgdata
-    volumes:
-      - db-data:/var/lib/postgresql/data/pgdata
-    restart: unless-stopped
-    networks:
-      - odoo-network
-    labels:
-      - "com.anthropic.agent=database"
+      - odoo-net
 
   db-backup:
-    image: tiredofit/db-backup
-    container_name: odoo-backup
+    image: tiredofit/db-backup:latest
+    container_name: daniel-fte-odoo-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
-      - DB_TYPE=pgsql
-      - DB_HOST=db
-      - DB_NAME=postgres
-      - DB_USER=odoo
-      - DB_PASS=odoo_password
-      - BACKUP_LOCATION=/backup
-      - COMPRESSION=GZ
-      - BACKUP_INTERVAL=86400
-      - CLEANUP_OLDER_THAN=604800
+      DB_TYPE: pgsql
+      DB_HOST: db
+      DB_NAME: ${ODOO_POSTGRES_DB:-postgres}
+      DB_USER: ${ODOO_POSTGRES_USER:-odoo}
+      DB_PASS: ${ODOO_POSTGRES_PASSWORD}
+      BACKUP_LOCATION: /backup
+      BACKUP_INTERVAL: ${ODOO_BACKUP_INTERVAL_SECONDS:-86400}
+      CLEANUP_TIME: ${ODOO_BACKUP_RETENTION_SECONDS:-1209600}
+      COMPRESSION: GZ
     volumes:
       - db-backups:/backup
-    depends_on:
-      - db
     networks:
-      - odoo-network
-    labels:
-      - "com.anthropic.agent=backup"
+      - odoo-net
+
+  caddy:
+    image: caddy:2
+    container_name: daniel-fte-odoo-caddy
+    restart: unless-stopped
+    depends_on:
+      odoo:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - odoo-net
 
 volumes:
   odoo-data:
-    driver: local
   db-data:
-    driver: local
   db-backups:
-    driver: local
+  caddy-data:
+  caddy-config:
 
 networks:
-  odoo-network:
+  odoo-net:
     driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.20.0.0/16

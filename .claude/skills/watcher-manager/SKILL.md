@@ -19,28 +19,28 @@ In the production deployment, all watchers (Gmail, WhatsApp, LinkedIn) run as th
 
 ### Check Status
 ```bash
-pm2 status
+python .claude/skills/watcher-manager/scripts/main_operation.py --action status --target all
 ```
-Look for `ai-orchestrator` process status (should be "online").
+Look for `daniel-fte-orchestrator-local` and `daniel-fte-orchestrator-cloud` status `online`.
 
 ### Start Orchestrator (starts all watchers)
 ```bash
-pm2 start ecosystem.config.js
+python .claude/skills/watcher-manager/scripts/main_operation.py --action start --target all
 ```
 
 ### Stop Orchestrator (stops all watchers)
 ```bash
-pm2 stop ai-orchestrator
+python .claude/skills/watcher-manager/scripts/main_operation.py --action stop --target all
 ```
 
 ### Restart Orchestrator (restarts all watchers)
 ```bash
-pm2 restart ai-orchestrator
+python .claude/skills/watcher-manager/scripts/main_operation.py --action restart --target all
 ```
 
 ### View Orchestrator Logs
 ```bash
-pm2 logs ai-orchestrator --lines 50
+python .claude/skills/watcher-manager/scripts/main_operation.py --action logs --target all --lines 50
 ```
 
 ### Check Watcher Status in Dashboard
@@ -59,10 +59,10 @@ cat AI_Employee_Vault/Dashboard.md
 If orchestrator is crashing:
 ```bash
 # Check error logs
-pm2 logs ai-orchestrator --err --lines 50
+python .claude/skills/watcher-manager/scripts/main_operation.py --action logs --target all --lines 50
 
 # Restart fresh
-pm2 restart ai-orchestrator
+python .claude/skills/watcher-manager/scripts/main_operation.py --action restart --target all
 
 # If still failing, see SETUP_TROUBLESHOOTING.md
 ```

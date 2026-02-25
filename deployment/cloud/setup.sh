@@ -1,102 +1,77 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# setup.sh - Install PM2 and initialize cloud deployment
-# Usage: ./setup.sh [--test]
+# Cloud bootstrap for Platinum tier:
+# - validates Node/PM2
+# - validates Docker + Docker Compose
+# - prepares cloud env file
+# - validates PM2 app config
 
-set -e
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
 
 echo "========================================="
-echo "Cloud Agent Setup"
+echo "Cloud FTE Setup"
 echo "========================================="
 
-# Check if Node.js is installed
-if ! command -v node &> /dev/null; then
-    echo "ERROR: Node.js is not installed"
-    echo "Please install Node.js 20+ before running this script"
-    exit 1
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: Node.js is required (20+)."
+  exit 1
+fi
+NODE_MAJOR="$(node --version | sed 's/^v//' | cut -d'.' -f1)"
+if [ "${NODE_MAJOR}" -lt 20 ]; then
+  echo "ERROR: Node.js 20+ required. Found: $(node --version)"
+  exit 1
+fi
+echo "Node.js OK: $(node --version)"
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "ERROR: npm is required."
+  exit 1
 fi
 
-# Check if npm is installed
-if ! command -v npm &> /dev/null; then
-    echo "ERROR: npm is not installed"
-    exit 1
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "Installing PM2 globally..."
+  npm install -g pm2
 fi
+echo "PM2 OK: $(pm2 --version)"
 
-# Check Node.js version (require 20+)
-NODE_VERSION=$(node --version | cut -d'.' -f1 | sed 's/v//')
-if [ "$NODE_VERSION" -lt 20 ]; then
-    echo "ERROR: Node.js 20+ required (found: $(node --version))"
-    exit 1
+if ! command -v docker >/dev/null 2>&1; then
+  echo "ERROR: Docker is required for Odoo deployment."
+  exit 1
 fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "ERROR: Docker Compose plugin is required."
+  exit 1
+fi
+echo "Docker OK: $(docker --version)"
 
-echo "✓ Node.js $(node --version) detected"
-
-# Install PM2 globally if not already installed
-if ! command -v pm2 &> /dev/null; then
-    echo "Installing PM2..."
-    npm install -g pm2
-    if [ $? -eq 0 ]; then
-        echo "✓ PM2 installed successfully"
-    else
-        echo "ERROR: Failed to install PM2"
-        exit 1
-    fi
+if [ ! -f ".env.cloud.example" ]; then
+  echo "ERROR: .env.cloud.example missing."
+  exit 1
+fi
+if [ ! -f ".env.cloud" ]; then
+  cp ".env.cloud.example" ".env.cloud"
+  echo "Created .env.cloud from .env.cloud.example"
 else
-    echo "✓ PM2 $(pm2 --version) already installed"
+  echo ".env.cloud already exists"
 fi
 
-# Install project dependencies
-echo "Installing project dependencies..."
-npm install
+echo
+echo "Validating PM2 ecosystem..."
+pm2 prettylist >/dev/null 2>&1 || true
+node -e "require('./deployment/cloud/ecosystem.config.js'); console.log('PM2 config load: OK')"
 
-# Create necessary config directories
-mkdir -p config addons logs
-
-# Copy .env.example to .env if .env doesn't exist
-if [ ! -f .env ]; then
-    if [ -f .env.example ]; then
-        cp .env.example .env
-        echo "✓ Created .env from .env.example"
-        echo "⚠ WARNING: Please edit .env with your actual credentials"
-    else
-        echo "ERROR: .env.example not found"
-        exit 1
-    fi
-else
-    echo "✓ .env already exists"
-fi
-
-# Test PM2 ecosystem configuration
-echo ""
-echo "Testing PM2 ecosystem configuration..."
-if [ "$1" = "--test" ]; then
-    echo "Testing PM2 ecosystem with dry-run..."
-    pm2 validate ecosystem.config.js
-    if [ $? -eq 0 ]; then
-        echo "✓ PM2 ecosystem configuration is valid"
-    else
-        echo "ERROR: PM2 ecosystem configuration has issues"
-        exit 1
-    fi
-else
-    echo "Use './setup.sh --test' to validate ecosystem.config.js"
-fi
-
-# Save PM2 configuration
-pm2 save
-
-# Setup PM2 startup script
-echo ""
-echo "Note: To enable PM2 startup on boot, run:"
-echo "  pm2 startup"
-echo "  # Follow the instructions from PM2"
-echo ""
+echo
 echo "========================================="
-echo "Setup complete!"
+echo "Next steps"
 echo "========================================="
-echo ""
-echo "Next steps:"
-echo "1. Edit .env with your credentials"
-echo "2. Run: docker-compose up -d (for Odoo)"
-echo "3. Run: pm2 start ecosystem.config.js"
-echo "4. Check status: pm2 status"
+echo "1) Edit .env.cloud with production credentials and domain."
+echo "2) Start Odoo stack:"
+echo "   docker compose --env-file .env.cloud -f deployment/cloud/docker-compose.odoo.yml up -d"
+echo "3) Start cloud orchestrator + Odoo MCP:"
+echo "   pm2 start deployment/cloud/ecosystem.config.js"
+echo "4) Persist PM2 on reboot:"
+echo "   pm2 save && pm2 startup"
+echo

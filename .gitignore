@@ -72,6 +72,8 @@ AI_Employee_Vault/Logs/*.json
 # Credentials (Gmail OAuth)
 credentials.json
 token.json
+gmail_token.json
+*_token.json
 *.key
 *.secret
 
@@ -108,6 +110,10 @@ AI_Employee_Vault/Ralph_History/
 AI_Employee_Vault/Recovery_Queue/
 AI_Employee_Vault/Alerts/
 .claude/state/
+AI_Employee_Vault/Signals/
+AI_Employee_Vault/Banking/
+AI_Employee_Vault/.fte_status
+AI_Employee_Vault/temp_email_send.json
 
 # Keep the folder structure with .gitkeep files
 !AI_Employee_Vault/Inbox/.gitkeep
@@ -144,3 +150,25 @@ AI_Employee_Vault/.obsidian/workspace-mobile.json
 # MCP servers (external/runtime)
 mcp-servers/node_modules/
 mcp-servers/*.lock
+
+# Browser automation session data (sensitive)
+session-data/
+Microsoft/
+.pytest_temp/
+.test_runtime/
+.tmp_test/
+
+# Temporary runtime files and caches
+.tmp/
+runtime-logs/
+pytest-cache-files-*/
+orchestrator_runtime.log
+orchestrator_runtime.out.log
+dashboard_runtime.log
+
+# Deprecated session locations (kept for reference)
+linkedin_session/
+whatsapp_session/
+facebook_session/
+instagram_session/
+instagram_session_corrupt_*/

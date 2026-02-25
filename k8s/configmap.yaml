@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fte-config
+  namespace: daniel-fte
+data:
+  DRY_RUN: "true"
+  HITL_REQUIRED: "true"
+  LOG_LEVEL: "INFO"
+  NODE_ENV: "production"

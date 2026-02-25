@@ -1,23 +1,52 @@
-# Platinum Tier Research Summary
+# Platinum Tier Research Notes (Current Implementation)
 
-## Vault Sync Mechanism
-**Decision**: Syncthing (primary), Git fallback
-**Rationale**: Syncthing provides real-time bidirectional sync (<10s latency), handles conflicts better for Markdown files, no merge conflicts like Git. Free, local-first. Git for backup/versioning.
-**Alternatives**: Git (merge hell for concurrent writes), rsync (unidirectional), Dropbox (cloud dependency violates local-first)
+## Local-First Control Plane (Synced Across Cloud + Local)
 
-## Odoo MCP Integration
-**Decision**: Custom Python MCP server using xmlrpc.client (Odoo 19 compatible)
-**Rationale**: Matches existing skill pattern, no extra deps, supports draft/live modes via env flags. JSON-RPC stable in 19, migrate to JSON-2 post-20.
-**Alternatives**: odoo-xmlrpc lib (adds dep), direct API calls (violates MCP principle)
+Decision: use `AI_Employee_Vault/` as the single source of truth for state.
 
-## Process Management
-**Decision**: PM2 for all services (orchestrator, watchers, MCP)
-**Rationale**: Cross-platform (Linux/Mac/Win), Python support, auto-restart, health checks, ecosystem file. Proven in Gold Tier.
-**Alternatives**: systemd (Linux-only), supervisord (Python-only, more config)
+Rationale:
+- Auditable: approvals and outcomes are files
+- Simple HITL: "approve by move" works without external services
+- Works offline and across tools (UI, scripts, Obsidian)
 
-## Cloud Provider
-**Decision**: Oracle Cloud Free Tier (2 VMs)
-**Rationale**: Always-free ARM instances (4 OCPU, 24GB RAM), sufficient for Odoo+PM2, no credit card for basic tier.
-**Alternatives**: AWS Lightsail (paid), GCP f1-micro (limited CPU)
+## Cloud/Local Work-Zone Specialization
 
-All clarifications resolved. Ready for design.
+Decision: enforce role ownership with `AGENT_ROLE` and `STRICT_WORK_ZONES=true`.
+
+Rationale:
+- Prevents local agent from claiming cloud-owned drafting tasks
+- Prevents cloud agent from drifting into local-only sensitive execution paths
+- Keeps Platinum handover deterministic for demo and production-ish flows
+
+## Qwen Invocation Strategy
+
+Decision: invoke Qwen CLI with prompt passed via stdin using:
+
+```
+qwen -y --input-format text
+```
+
+Rationale:
+- Avoids Windows quoting/escaping issues with `-p`
+- Easier to normalize output and enforce "plain text only" constraints
+
+## Facebook Automation Strategy
+
+Decision: use Playwright Chromium **persistent context** with `user_data_dir=FACEBOOK_SESSION_DIR`.
+
+Rationale:
+- Session is captured once via an operator login step
+- Subsequent post attempts reuse the same local browser profile directory
+- Enables deterministic "open composer, fill textbox, click Post" automation
+
+Operational safety:
+- `DRY_RUN=true` prevents live posting
+- Login/setup should be non-headless for transparency
+
+## Orchestrator Liveness
+
+Decision: write a heartbeat file (`AI_Employee_Vault/Logs/orchestrator_heartbeat.json`) on a short interval.
+
+Rationale:
+- Dashboard can display a reliable "brain running" indicator without needing sockets/services
+- Avoids false negatives during long cycles by using a dedicated heartbeat loop

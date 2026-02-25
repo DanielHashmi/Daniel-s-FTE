@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import shutil
 from datetime import datetime
+from uuid import uuid4
 
 
 @pytest.fixture
@@ -155,3 +156,16 @@ def sample_file_item():
         "suggested_actions": ["Process file", "Archive file"],
         "notes": "Test file from inbox"
     }
+
+
+@pytest.fixture
+def workspace_tmp_dir():
+    """Create a writable temp directory inside workspace (avoids system temp ACL issues)."""
+    base = Path(".test_runtime")
+    base.mkdir(parents=True, exist_ok=True)
+    path = base / f"tmp_{uuid4().hex}"
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)

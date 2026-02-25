@@ -30,7 +30,7 @@ class TestWatchers:
         # (Mocking specifics depends on how deep we want to go)
         assert watcher.name == "gmail_watcher"
 
-    @patch('src.watchers.whatsapp.sync_playwright')
+    @patch('playwright.sync_api.sync_playwright')
     def test_whatsapp_watcher_init(self, mock_playwright, mock_vault):
         """Test WhatsApp watcher initialization."""
         watcher = WhatsAppWatcher(headless=True)
@@ -45,4 +45,3 @@ class TestWatchers:
         watcher = LinkedInWatcher()
         assert watcher.name == "linkedin_watcher"
         watcher.check_for_updates() # Should not raise error
-

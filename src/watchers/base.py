@@ -17,11 +17,14 @@ from src.lib.vault import vault
 class BaseWatcher(abc.ABC):
     """Abstract base class for all channel watchers."""
 
-    def __init__(self, name: str, interval: int = 60):
+    def __init__(self, name: str, interval: int = 60, domain: Optional[str] = None):
         self.name = name
         self.interval = interval
+        self.domain = (domain or "").strip().lower() or None
         self.logger = get_logger(name)
         self.running = False
+        # Track processed items to avoid duplicates (in-memory, per process).
+        self.processed_ids: set[str] = set()
 
         # Ensure vault structure is ready
         vault.ensure_structure()
@@ -70,7 +73,9 @@ class BaseWatcher(abc.ABC):
         unique_str = f"{self.name}-{timestamp}-{str(metadata)}"
         action_id = f"act_{hashlib.md5(unique_str.encode()).hexdigest()[:8]}"
 
-        filename = f"{timestamp}_{self.name}_{type}.md"
+        # Hackathon convention: file names start with the TYPE.
+        # Include action_id to keep the mapping stable even when moved across folders/agents.
+        filename = f"{type.upper()}_{action_id}.md"
 
         # Determine strict source type from class name or param
         source = self.name.replace("_watcher", "").lower()
@@ -82,6 +87,7 @@ class BaseWatcher(abc.ABC):
 id: "{action_id}"
 type: "{type}"
 source: "{source}"
+domain: "{self.domain or 'general'}"
 priority: "{priority}"
 timestamp: "{iso_timestamp}"
 status: "pending"
@@ -100,7 +106,7 @@ metadata:
 
         full_content = yaml_frontmatter + content
 
-        path = vault.write_action(filename, full_content)
+        path = vault.write_action(filename, full_content, domain=self.domain)
 
         self.logger.log_action(
             action_type="create_action_file",

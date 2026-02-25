@@ -16,7 +16,7 @@ description: "WHAT: Initialize AI Employee Vault structure with folders and core
 3. Confirm success message before proceeding.
 
 ## Validation
-- [ ] All 8 folders created (Inbox, Needs_Action, Done, Plans, Logs, Pending_Approval, Approved, Rejected)
+- [ ] Core + Platinum folders created (including domain subfolders and In_Progress/Signals/Config)
 - [ ] Core files created (Dashboard.md, Company_Handbook.md, README.md, .gitignore)
 - [ ] No errors in verification output
 

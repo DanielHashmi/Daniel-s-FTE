@@ -1,1 +1,14 @@
-[]
+﻿[
+  {
+    "cmd": "\"C:\\Users\\kk\\Desktop\\Daniel's FTE\\RUN_CEO_BRIEFING.bat\"",
+    "schedule": "weekly@sun@23:00",
+    "comment": "weekly_ceo_briefing",
+    "active": true
+  },
+  {
+    "cmd": "\"C:\\Users\\kk\\Desktop\\Daniel's FTE\\RUN_LINKEDIN_AUTOPOST_ACTION.bat\"",
+    "schedule": "daily@09:00",
+    "comment": "linkedin_autopost_action",
+    "active": true
+  }
+]

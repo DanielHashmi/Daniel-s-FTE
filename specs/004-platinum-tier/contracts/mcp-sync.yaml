@@ -1,5 +1,7 @@
 openapi: 3.0.0
 info:
+  # Optional Phase-2 contract for direct cloud/local sync endpoints.
+  # Phase-1 implementation uses vault file handoffs + claim-by-move as audit record.
   title: Vault Sync MCP Endpoints
   version: 1.0.0
 

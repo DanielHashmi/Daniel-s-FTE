@@ -1,31 +1,26 @@
-# Specification Quality Checklist: Platinum Tier Cloud + Local Executive
+# Specification Quality Checklist: Platinum Tier (Hackathon 0)
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-01-20
-**Feature**: [specs/004-platinum-tier/spec.md](spec.md)
+**Purpose**: Validate that `specs/004-platinum-tier/spec.md` reflects full Platinum requirements and remains testable.  
+**Updated**: 2026-02-15
 
 ## Content Quality
-- [X] No implementation details (languages, frameworks, APIs)
-- [X] Focused on user value and business needs
-- [X] Written for non-technical stakeholders
-- [X] All mandatory sections completed
+
+- [x] Focused on cloud/local operational behavior and user outcomes
+- [x] Explicit HITL constraints for sensitive actions
+- [x] Security posture documented (no secrets in sync, dry-run controls)
+- [x] Acceptance gate includes minimum passing Platinum demo flow
 
 ## Requirement Completeness
-- [X] No [NEEDS CLARIFICATION] markers remain
-- [X] Requirements are testable and unambiguous
-- [X] Success criteria are measurable
-- [X] Success criteria are technology-agnostic (no implementation details)
-- [X] All acceptance scenarios are defined
-- [X] Edge cases are identified
-- [X] Scope is clearly bounded
-- [X] Dependencies and assumptions identified
 
-## Feature Readiness
-- [X] All functional requirements have clear acceptance criteria
-- [X] User scenarios cover primary flows
-- [X] Feature meets measurable outcomes defined in Success Criteria
-- [X] No implementation details leak into specification
+- [x] Cloud/local work-zone specialization requirements included
+- [x] Claim-by-move delegation requirements included
+- [x] MCP-based external action requirements included
+- [x] Odoo cloud deployment controls (HTTPS/backup/health) included
+- [x] Ralph loop persistence requirements included
 
-## Notes
-All items pass. Ready for `/sp.plan`.
-**Status**: ✅ COMPLETE (Plan executed)
+## Repo Alignment
+
+- [x] Spec matches orchestrator role split in `src/orchestration/orchestrator.py`
+- [x] Spec matches MCP execution in `src/orchestration/approval_manager.py`
+- [x] Spec matches cloud deployment assets in `deployment/cloud/`
+- [x] Spec matches demo validation script `scripts/platinum_demo_gate.py`

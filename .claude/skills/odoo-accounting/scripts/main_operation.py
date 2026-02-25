@@ -9,22 +9,50 @@ import os
 import sys
 import json
 import yaml
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Any, List
-from xmlrpc.client import ServerProxy
 import argparse
 import csv
+import urllib.request
+import urllib.error
 from dotenv import load_dotenv
 
+# Ensure project root is on sys.path so this skill can reuse shared libraries.
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.lib.logging import get_logger
+
 # Load environment variables
-load_dotenv(Path(__file__).parent.parent.parent.parent.parent / ".env")
+# 1. Try loading from current working directory (e.g. when run from project root)
+load_dotenv()
+
+# 2. Try loading from absolute path relative to script
+try:
+    print(f"DEBUG: Python: {sys.executable}, CWD: {os.getcwd()}", file=sys.stderr)
+    script_path = Path(__file__).resolve()
+    # 5 levels up: scripts -> odoo-accounting -> skills -> .claude -> Daniel's FTE
+    if len(script_path.parents) >= 5:
+        env_path = script_path.parents[4] / ".env"
+        print(f"DEBUG: Looking for .env at {env_path}", file=sys.stderr)
+        if env_path.exists():
+            print(f"DEBUG: Found .env, loading with override=True...", file=sys.stderr)
+            load_dotenv(env_path, override=True)
+            url = os.getenv('ODOO_URL')
+            print(f"DEBUG: ODOO_URL loaded: '{url}' (Type: {type(url)})", file=sys.stderr)
+        else:
+            print(f"Warning: .env not found at expected path: {env_path}", file=sys.stderr)
+except Exception as e:
+    print(f"Warning: Failed to resolve .env path: {e}", file=sys.stderr)
 
 # Config
 VAULT_ROOT = Path(os.getenv('VAULT_ROOT', 'AI_Employee_Vault'))
 ACCOUNTING_DIR = VAULT_ROOT / "Accounting"
 LOGS_DIR = VAULT_ROOT / "Logs"
-AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+logger = get_logger("odoo_accounting_skill")
 
 
 def setup_dirs():
@@ -34,21 +62,67 @@ def setup_dirs():
 
 def audit_log(action: str, target: str, status: str, details: Optional[dict] = None):
     """Log action to audit trail."""
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "odoo_accounting",
-        "sub_action": action,
-        "target": target,
-        "result": status,
-        "actor": "odoo_accounting_skill",
-        "details": details or {}
-    }
     try:
-        logs = json.loads(AUDIT_LOG.read_text()) if AUDIT_LOG.exists() else []
-        logs.append(entry)
-        AUDIT_LOG.write_text(json.dumps(logs, indent=2))
-    except Exception as e:
-        print(f"Warning: Audit log failed: {e}", file=sys.stderr)
+        logger.log_action(
+            action_type="odoo_accounting",
+            result=status,
+            target=target,
+            parameters={"sub_action": action},
+            details=details or {},
+            approval_status="not_required",
+        )
+    except Exception:
+        # Never break accounting operations due to logging.
+        pass
+
+
+class OdooJsonRpcClient:
+    """
+    Minimal Odoo JSON-RPC client (Odoo 19+).
+
+    Reference: https://www.odoo.com/documentation/19.0/developer/reference/external_api.html
+    """
+
+    def __init__(self, url: str, db: str, username: str, password: str, timeout_seconds: int = 30):
+        self.url = (url or "").rstrip("/")
+        self.db = db
+        self.username = username
+        self.password = password
+        self.timeout_seconds = timeout_seconds
+        self.uid = self._call("common", "login", [self.db, self.username, self.password])
+        if not self.uid:
+            raise ConnectionError("Failed to authenticate with Odoo (uid is empty)")
+
+    def _call(self, service: str, method: str, args: list) -> Any:
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {"service": service, "method": method, "args": args},
+            "id": int(time.time() * 1000),
+        }
+
+        req = urllib.request.Request(
+            f"{self.url}/jsonrpc",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            raise ConnectionError(f"HTTP error from Odoo JSON-RPC: {e.code}") from e
+        except urllib.error.URLError as e:
+            raise ConnectionError(f"Network error contacting Odoo JSON-RPC: {e.reason}") from e
+
+        data = json.loads(raw) if raw else {}
+        if isinstance(data, dict) and data.get("error"):
+            raise RuntimeError(str(data.get("error")))
+        return data.get("result") if isinstance(data, dict) else None
+
+    def execute_kw(self, db: str, uid: int, password: str, model: str, method: str, args: list, kwargs: Optional[dict] = None) -> Any:
+        return self._call("object", "execute_kw", [db, uid, password, model, method, args, kwargs or {}])
 
 
 class OdooAccountingClient:
@@ -61,7 +135,12 @@ class OdooAccountingClient:
         Args:
             mode: 'draft' for cloud (no posting), 'live' for local (with approval)
         """
-        self.mode = mode
+        self.agent_role = os.getenv("AGENT_ROLE", "").strip().lower()
+        requested_mode = mode
+        if self.agent_role == "cloud" and requested_mode != "draft":
+            print("[WARN] Cloud role cannot run live accounting operations. Forcing mode=draft.")
+            requested_mode = "draft"
+        self.mode = requested_mode
         self.dry_run = os.getenv('DRY_RUN', 'true').lower() == 'true'
 
         # Odoo connection settings
@@ -78,16 +157,12 @@ class OdooAccountingClient:
         self._connect()
 
     def _connect(self):
-        """Connect to Odoo XML-RPC API."""
+        """Connect to Odoo JSON-RPC API (hackathon requirement: Odoo 19+ JSON-RPC)."""
         try:
-            common = ServerProxy(f'{self.url}/xmlrpc/2/common')
-            self.uid = common.authenticate(self.db, self.username, self.password, {})
-
-            if not self.uid:
-                raise ConnectionError("Failed to authenticate with Odoo")
-
-            self.models = ServerProxy(f'{self.url}/xmlrpc/2/object')
-            print(f"✓ Connected to Odoo ({self.mode} mode)")
+            client = OdooJsonRpcClient(self.url, self.db, self.username, self.password)
+            self.uid = client.uid
+            self.models = client
+            print(f"[OK] Connected to Odoo via JSON-RPC ({self.mode} mode)")
 
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Odoo: {e}")
@@ -231,7 +306,7 @@ class OdooAccountingClient:
                     'Validation': 'PASS' if validation['valid'] else 'FAIL'
                 })
 
-        print(f"✓ Report generated: {report_file}")
+        print(f"[OK] Report generated: {report_file}")
         print(f"  Total invoices: {len(invoices)}")
 
         return report_file
@@ -253,6 +328,12 @@ class OdooAccountingClient:
             'draft_mode': self.mode == 'draft',
             'approval_required': require_approval
         }
+
+        if self.agent_role == "cloud":
+            result['posted'] = False
+            result['error'] = "Cloud role is draft-only for accounting posting. Local approval/execution required."
+            audit_log('post_invoice_blocked', str(invoice_id), 'blocked', {'reason': 'cloud_draft_only'})
+            return result
 
         # Validate invoice
         validation = self.validate_invoice(invoice_id)
@@ -313,7 +394,7 @@ To reject: Move to Rejected folder with feedback
                 result['posted'] = False
                 result['approval_required'] = True
                 result['approval_file'] = str(approval_file)
-                print(f"✓ Approval request created: {approval_file}")
+                print(f"[OK] Approval request created: {approval_file}")
                 print(f"  Manual approval needed for invoice {invoice_id}")
                 return result
 
@@ -332,7 +413,7 @@ To reject: Move to Rejected folder with feedback
                 )
                 result['posted'] = True
                 audit_log('post_invoice', str(invoice_id), 'success', {'invoice_id': invoice_id})
-                print(f"✓ Posted invoice {invoice_id}")
+                print(f"[OK] Posted invoice {invoice_id}")
 
         except Exception as e:
             result['posted'] = False
@@ -402,6 +483,68 @@ To reject: Move to Rejected folder with feedback
 
         return summary
 
+    def sync_transactions(self) -> Dict[str, Any]:
+        """Fetch posted transactions and save to Vault for Dashboard."""
+        print("Syncing posted transactions...")
+        
+        today = datetime.now()
+        start_date = today.replace(day=1).strftime('%Y-%m-%d')
+        
+        # Domain: posted customer invoices and vendor bills from this month
+        domain = [
+            ('state', '=', 'posted'),
+            ('invoice_date', '>=', start_date),
+            ('move_type', 'in', ['out_invoice', 'in_invoice'])
+        ]
+        
+        try:
+            moves = self.models.execute_kw(
+                self.db, self.uid, self.password,
+                'account.move', 'search_read',
+                [domain],
+                {'fields': ['name', 'invoice_date', 'amount_total', 'partner_id', 'move_type']}
+            )
+        except Exception as e:
+            print(f"Error fetching moves: {e}")
+            return {"success": False, "error": str(e)}
+
+        transactions = []
+        for move in moves:
+            t_type = "income" if move['move_type'] == 'out_invoice' else "expense"
+            
+            transactions.append({
+                "id": move['id'],
+                "date": move['invoice_date'],
+                "description": f"{move['name']} - {move['partner_id'][1] if move['partner_id'] else 'Unknown'}",
+                "amount": move['amount_total'],
+                "type": t_type,
+                "status": "posted"
+            })
+            
+        # Save to Vault
+        year = today.year
+        month = today.month
+        month_str = f"{year:04d}-{month:02d}"
+        target_dir = ACCOUNTING_DIR / "transactions" / month_str
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+        target_file = target_dir / "transactions.json"
+        
+        data = {
+            "year": year,
+            "month": month,
+            "transactions": transactions,
+            "updated_at": datetime.now().isoformat(),
+            "count": len(transactions)
+        }
+        
+        with open(target_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, default=str)
+            
+        print(f"[OK] Synced {len(transactions)} transactions to {target_file}")
+        
+        return {"success": True, "count": len(transactions), "path": str(target_file)}
+
 
 def main():
     """CLI entry point."""
@@ -410,6 +553,9 @@ def main():
                        help='Operation mode (draft for cloud, live for local)')
 
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
+
+    # Sync command
+    parser_sync = subparsers.add_parser('sync', help='Sync posted transactions to Vault')
 
     # Draft report command
     parser_report = subparsers.add_parser('draft-report', help='Generate draft invoice report')
@@ -443,7 +589,10 @@ def main():
     # Create client
     client = OdooAccountingClient(mode=args.mode)
 
-    if args.command == 'draft-report':
+    if args.command == 'sync':
+        client.sync_transactions()
+
+    elif args.command == 'draft-report':
         output = args.output
         if output:
             client.create_invoice_draft_report(output)

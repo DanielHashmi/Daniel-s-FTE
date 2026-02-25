@@ -191,48 +191,65 @@ class OdooMcpServer {
     // Handle tool calls by spawning Python script
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      const params = args || {};
+      const agentRole = String(process.env.AGENT_ROLE || '').toLowerCase();
 
       try {
+        // Platinum safety: cloud agent is draft-only for accounting posting.
+        if (agentRole === 'cloud' && (name === 'post_invoice' || name === 'post_invoice_batch')) {
+          return {
+            content: [{
+              type: 'text',
+              text: 'Blocked: cloud role is draft-only for invoice posting. Move approval to local executor.'
+            }],
+            isError: true
+          };
+        }
+
         // Build command
         const cmd = '.claude/skills/odoo-accounting/scripts/main_operation.py';
-        let pythonArgs = ['--mode', args.mode || 'draft'];
+        let mode = params.mode || 'draft';
+        if (agentRole === 'cloud') {
+          mode = 'draft';
+        }
+        let pythonArgs = ['--mode', mode];
 
         switch (name) {
           case 'get_draft_invoices':
-            pythonArgs = [...pythonArgs, 'summary', '--limit', (args.limit || 50).toString()];
+            pythonArgs = [...pythonArgs, 'summary', '--limit', (params.limit || 50).toString()];
             break;
 
           case 'validate_invoice':
-            pythonArgs = [...pythonArgs, 'validate', args.invoice_id.toString()];
+            pythonArgs = [...pythonArgs, 'validate', params.invoice_id.toString()];
             break;
 
           case 'validate_invoice_batch':
-            pythonArgs = [...pythonArgs, 'validate-batch', ...args.invoice_ids.map(id => id.toString())];
+            pythonArgs = [...pythonArgs, 'validate-batch', ...params.invoice_ids.map(id => id.toString())];
             break;
 
           case 'post_invoice':
-            pythonArgs = [...pythonArgs, 'post', args.invoice_id.toString()];
-            if (!args.require_approval) {
+            pythonArgs = [...pythonArgs, 'post', params.invoice_id.toString()];
+            if (!params.require_approval) {
               pythonArgs.push('--no-approval');
             }
             break;
 
           case 'post_invoice_batch':
-            pythonArgs = [...pythonArgs, 'post-batch', ...args.invoice_ids.map(id => id.toString())];
-            if (!args.require_approval) {
+            pythonArgs = [...pythonArgs, 'post-batch', ...params.invoice_ids.map(id => id.toString())];
+            if (!params.require_approval) {
               pythonArgs.push('--no-approval');
             }
             break;
 
           case 'generate_draft_report':
             pythonArgs = [...pythonArgs, 'draft-report'];
-            if (args.output_file) {
-              pythonArgs.push('--output', args.output_file);
+            if (params.output_file) {
+              pythonArgs.push('--output', params.output_file);
             }
             break;
 
           case 'generate_invoice_summary':
-            pythonArgs = [...pythonArgs, 'summary', '--limit', (args.limit || 100).toString()];
+            pythonArgs = [...pythonArgs, 'summary', '--limit', (params.limit || 100).toString()];
             break;
 
           default:
@@ -241,7 +258,8 @@ class OdooMcpServer {
 
         // Execute Python script
         return new Promise((resolve, reject) => {
-          const pythonProcess = spawn('python3', [cmd, ...pythonArgs], {
+          const pythonExe = process.env.PYTHON_EXE || (process.platform === 'win32' ? 'python' : 'python3');
+          const pythonProcess = spawn(pythonExe, [cmd, ...pythonArgs], {
             env: { ...process.env }
           });
 

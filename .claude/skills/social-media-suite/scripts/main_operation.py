@@ -1,283 +1,232 @@
-#!/usr/bin/env python3
-"""Social Media Suite - Gold Tier Skill
+﻿#!/usr/bin/env python3
+"""social-media-suite skill (Gold Tier)
 
-Post to Facebook, Instagram, and Twitter/X with platform-specific formatting.
-Supports HITL approval workflow for all posts.
+Creates HITL approval request files for Facebook, Instagram, Twitter/X (and optionally LinkedIn)
+and provides a simple summary based on the audit logs.
+
+Execution happens after human approval via the local orchestrator + MCP (social-mcp).
 """
+
+from __future__ import annotations
+
 import argparse
-import sys
 import json
 import os
+import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime
-from typing import Optional
-import hashlib
-from dotenv import load_dotenv
+from typing import Any, Dict, Optional
 
-# Load environment variables from .env
-load_dotenv(Path(__file__).parent.parent.parent.parent.parent / ".env")
+import yaml
 
-# Config
-VAULT_ROOT = Path("AI_Employee_Vault")
-PENDING_APPROVAL = VAULT_ROOT / "Pending_Approval"
-LOGS_DIR = VAULT_ROOT / "Logs"
-SOCIAL_LOG = LOGS_DIR / "Social_Posts.log"
-AUDIT_LOG = LOGS_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+os.chdir(PROJECT_ROOT)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-# Platform character limits
+from src.lib.logging import get_logger
+from src.lib.vault import vault
+
+logger = get_logger("social_media_suite_skill")
+
 PLATFORM_LIMITS = {
     "facebook": 63206,
     "instagram": 2200,
     "twitter": 280,
-    "linkedin": 3000  # Already exists in social-ops
+    "linkedin": 3000,
 }
 
 
-def setup_dirs():
-    PENDING_APPROVAL.mkdir(parents=True, exist_ok=True)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-def audit_log(action: str, target: str, status: str, details: Optional[dict] = None):
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "action_type": "social_media",
-        "sub_action": action,
-        "target": target,
-        "result": status,
-        "actor": "social_media_suite_skill",
-        "details": details or {}
-    }
-    try:
-        logs = json.loads(AUDIT_LOG.read_text()) if AUDIT_LOG.exists() else []
-        logs.append(entry)
-        AUDIT_LOG.write_text(json.dumps(logs, indent=2))
-    except Exception as e:
-        print(f"Warning: Audit log failed: {e}", file=sys.stderr)
-
-
-def check_credentials(platform: str) -> bool:
-    """Check if platform credentials are configured."""
-    cred_map = {
-        "facebook": ["META_ACCESS_TOKEN", "META_PAGE_ID"],
-        "instagram": ["META_ACCESS_TOKEN", "INSTAGRAM_BUSINESS_ID"],
-        "twitter": ["TWITTER_API_KEY", "TWITTER_API_SECRET", "TWITTER_ACCESS_TOKEN", "TWITTER_ACCESS_TOKEN_SECRET"],
-    }
-    required = cred_map.get(platform, [])
-    return all(os.getenv(var) for var in required)
-
-
-def truncate_message(message: str, platform: str) -> tuple[str, bool]:
-    """Truncate message to platform limit, return (message, was_truncated)."""
+def _truncate(platform: str, text: str) -> str:
     limit = PLATFORM_LIMITS.get(platform, 1000)
-    if len(message) <= limit:
-        return message, False
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
 
-    # Smart truncate: preserve hashtags at end if present
-    truncated = message[:limit - 3]
-    if "#" in message[limit:]:
-        # Try to fit at least one hashtag
-        hashtags = [w for w in message.split() if w.startswith("#")]
+
+def _write_approval(frontmatter: Dict[str, Any], body: str, domain: str) -> Path:
+    vault.ensure_structure()
+    dir_path = vault.get_domain_dir("pending_approval", domain)
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+    ts = int(time.time())
+    platform = str(frontmatter.get("platform") or "unknown").lower()
+    filename = f"{ts}_SOCIAL_{platform}_{frontmatter.get('id','manual')}.md"
+    path = dir_path / filename
+
+    content = "---\n" + yaml.safe_dump(frontmatter, sort_keys=False).strip() + "\n---\n\n" + body.strip() + "\n"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def create_social_approval(
+    platform: str,
+    message: str,
+    domain: str,
+    *,
+    instagram_image_url: Optional[str] = None,
+    instagram_caption: Optional[str] = None,
+    hashtags: Optional[str] = None,
+) -> Path:
+    platform = platform.strip().lower()
+    if platform not in PLATFORM_LIMITS:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+    ts = int(time.time())
+    req_id = f"SOCIAL-{platform.upper()}-{ts}"
+
+    frontmatter: Dict[str, Any] = {
+        "id": req_id,
+        "type": "approval_request",
+        "action": "social_post",
+        "platform": platform,
+        "created": _utc_now_iso(),
+        "status": "pending",
+        "domain": domain,
+        "source_action_id": f"manual_{ts}",
+    }
+
+    if platform == "instagram":
+        # social-mcp posts to Instagram via Graph API which requires a public image URL.
+        if not instagram_image_url:
+            raise ValueError("Instagram requires --image-url (public URL)")
+        caption = instagram_caption or message
+        frontmatter["image_url"] = instagram_image_url
+        frontmatter["caption"] = _truncate("instagram", caption)
         if hashtags:
-            last_hashtag = hashtags[-1]
-            if len(truncated) + len(last_hashtag) + 4 <= limit:
-                truncated = truncated[:limit - len(last_hashtag) - 4] + "... " + last_hashtag
-            else:
-                truncated += "..."
-        else:
-            truncated += "..."
+            frontmatter["hashtags"] = hashtags
+
+        body = (
+            "# Social Post Approval Request (instagram)\n\n"
+            "## Caption\n"
+            f"{frontmatter['caption']}\n\n"
+            "## Image URL\n"
+            f"{instagram_image_url}\n\n"
+            "---\n\n"
+            "Move this file to `Approved/` to post, or `Rejected/` to cancel.\n"
+        )
     else:
-        truncated += "..."
+        text = _truncate(platform, message)
+        body = (
+            f"# Social Post Approval Request ({platform})\n\n"
+            "## Content\n"
+            f"{text}\n\n"
+            "---\n\n"
+            "Move this file to `Approved/` to post, or `Rejected/` to cancel.\n"
+        )
 
-    return truncated, True
+    path = _write_approval(frontmatter, body, domain=domain)
 
+    logger.log_action(
+        action_type="social_approval_created",
+        result="success",
+        target=str(path),
+        parameters={"platform": platform, "domain": domain},
+        approval_status="pending",
+    )
 
-def create_approval_request(platform: str, message: str, image: Optional[str] = None,
-                           hashtags: Optional[str] = None) -> Path:
-    """Create HITL approval request for social media post."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    post_id = hashlib.md5(f"{platform}{timestamp}{message[:50]}".encode()).hexdigest()[:8]
-
-    # Check for truncation
-    final_message, was_truncated = truncate_message(message, platform)
-
-    content = f"""---
-id: SOCIAL-{platform.upper()}-{post_id}
-type: approval_request
-action: social_post
-platform: {platform}
-created: {datetime.now().isoformat()}
-actor: social_media_suite_skill
-priority: normal
-status: pending
----
-
-# Social Media Post Approval Request
-
-## Platform
-**{platform.capitalize()}** (Character limit: {PLATFORM_LIMITS.get(platform, 'N/A')})
-
-## Content
-{final_message}
-
-{"## Image" if image else ""}
-{f"Attachment: {image}" if image else ""}
-
-{"## Hashtags" if hashtags else ""}
-{hashtags if hashtags else ""}
-
-{"## ⚠️ NOTICE: Content was truncated to fit platform limits" if was_truncated else ""}
-
-## Approval Criteria
-- [ ] Content appropriate for platform
-- [ ] No sensitive information
-- [ ] Links verified (if any)
-- [ ] Image appropriate (if any)
-
-## To Approve
-Move this file to `/Approved/` folder.
-
-## To Reject
-Move this file to `/Rejected/` folder.
-
----
-*Created by social-media-suite skill*
-"""
-
-    filepath = PENDING_APPROVAL / f"SOCIAL_{platform}_{timestamp}.md"
-    filepath.write_text(content)
-    return filepath
+    return path
 
 
-def post_to_platform(platform: str, message: str, image: Optional[str] = None,
-                     link: Optional[str] = None, hashtags: Optional[str] = None,
-                     force_dry_run: bool = False):
-    """Post to specified platform (creates approval request in dry-run)."""
-    dry_run = force_dry_run or os.getenv("DRY_RUN", "true").lower() == "true"
-    has_creds = check_credentials(platform)
-
-    # Always require approval first
-    approval_file = create_approval_request(platform, message, image, hashtags)
-
-    if dry_run or not has_creds:
-        # Log the dry run
-        log_entry = f"[{datetime.now().isoformat()}] [DRY RUN] {platform.upper()}: {message[:100]}...\n"
-        with open(SOCIAL_LOG, "a") as f:
-            f.write(log_entry)
-
-        mode = "DRY RUN" if dry_run else "PENDING CREDENTIALS"
-        print(f"✓ Approval request created ({mode})")
-        print(f"  Platform: {platform.capitalize()}")
-        print(f"  File: {approval_file.name}")
-        audit_log("post_request", platform, f"approval_created ({mode.lower()})",
-                 {"message_length": len(message), "has_image": bool(image)})
-        return True
-
-    # Real posting would happen here after approval
-    print("✗ Real posting requires approved file in /Approved folder.")
-    return False
+def _log_files_for_days(days: int) -> list[Path]:
+    vault.ensure_structure()
+    base = vault.dirs["logs"]
+    out = []
+    now = datetime.now(timezone.utc).date()
+    for i in range(days):
+        d = now - timedelta(days=i)
+        p = base / f"{d.isoformat()}.json"
+        if p.exists():
+            out.append(p)
+    return out
 
 
-def multi_platform_post(message: str, image: Optional[str] = None,
-                        platforms: list = None):
-    """Create approval requests for multiple platforms."""
-    platforms = platforms or ["facebook", "instagram", "twitter"]
+def summary(days: int = 7) -> int:
+    counts = {"facebook": 0, "instagram": 0, "twitter": 0, "linkedin": 0}
 
-    print(f"Creating approval requests for {len(platforms)} platforms...")
-    for platform in platforms:
-        post_to_platform(platform, message, image, force_dry_run=True)
+    for p in _log_files_for_days(days):
+        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
 
-    print(f"\n✓ Created {len(platforms)} approval request(s)")
-    print("  Review files in: AI_Employee_Vault/Pending_Approval/")
-    return True
+            at = str(obj.get("action_type") or "")
+            if at == "facebook_post":
+                counts["facebook"] += 1
+            elif at == "instagram_post":
+                counts["instagram"] += 1
+            elif at == "twitter_post":
+                counts["twitter"] += 1
+            elif at == "linkedin_post":
+                counts["linkedin"] += 1
 
-
-def check_status():
-    """Check status of all social media integrations."""
-    print("Social Media Suite Status:")
-    print("-" * 40)
-
-    for platform in ["facebook", "instagram", "twitter"]:
-        has_creds = check_credentials(platform)
-        status = "✓ Configured" if has_creds else "✗ Not configured"
-        print(f"  {platform.capitalize():12} {status}")
-
-    dry_run = os.getenv("DRY_RUN", "true").lower() == "true"
-    print(f"\n  Mode: {'DRY RUN (simulated)' if dry_run else 'LIVE'}")
-
-    # Count pending posts
-    pending = list(PENDING_APPROVAL.glob("SOCIAL_*.md"))
-    print(f"  Pending approval: {len(pending)}")
-
-    return True
+    print(f"Social Media Summary (last {days} days)")
+    for k, v in counts.items():
+        print(f"- {k}: {v}")
+    return 0
 
 
-def generate_summary(days: int = 7):
-    """Generate social media posting summary for CEO Briefing."""
-    if not SOCIAL_LOG.exists():
-        print("No social media activity recorded.")
-        return True
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Social Media Suite")
+    parser.add_argument("--action", required=True, choices=["post", "summary"])
+    parser.add_argument("--platform", choices=["facebook", "instagram", "twitter", "linkedin", "all"])
+    parser.add_argument("--message", help="Post content (caption for Instagram if --caption not provided)")
+    parser.add_argument("--domain", default=os.getenv("SOCIAL_DOMAIN", "business"))
 
-    lines = SOCIAL_LOG.read_text().strip().split("\n") if SOCIAL_LOG.exists() else []
-
-    # Count posts per platform
-    platforms = {"facebook": 0, "instagram": 0, "twitter": 0, "linkedin": 0}
-    for line in lines:
-        for platform in platforms:
-            if platform.upper() in line:
-                platforms[platform] += 1
-
-    print(f"Social Media Summary (Last {days} days):")
-    print("-" * 40)
-    total = 0
-    for platform, count in platforms.items():
-        print(f"  {platform.capitalize():12} {count} post(s)")
-        total += count
-
-    print(f"\n  Total: {total} post(s)")
-    return True
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Social Media Suite Operations")
-    parser.add_argument("--platform", choices=["facebook", "instagram", "twitter", "all"],
-                       help="Target platform")
-    parser.add_argument("--action", required=True,
-                       choices=["post", "status", "summary"])
-    parser.add_argument("--message", help="Post message content")
-    parser.add_argument("--image", help="Path to image file")
-    parser.add_argument("--link", help="URL to include")
-    parser.add_argument("--caption", help="Caption for Instagram")
+    # Instagram specifics
+    parser.add_argument("--image-url", help="Instagram public image URL")
+    parser.add_argument("--caption", help="Instagram caption")
     parser.add_argument("--hashtags", help="Comma-separated hashtags")
-    parser.add_argument("--days", type=int, default=7, help="Days for summary")
+
+    parser.add_argument("--days", type=int, default=7)
 
     args = parser.parse_args()
-    setup_dirs()
+    domain = str(args.domain).strip().lower() or "business"
+
+    if args.action == "summary":
+        return summary(days=int(args.days))
 
     if args.action == "post":
+        if not args.platform:
+            print("--platform is required for post")
+            return 1
         if not args.message and not args.caption:
-            print("Error: --message or --caption required for post")
-            sys.exit(1)
+            print("--message (or --caption) is required")
+            return 1
 
-        message = args.message or args.caption
-
+        msg = args.message or ""
+        platforms = [args.platform]
         if args.platform == "all":
-            if not multi_platform_post(message, args.image):
-                sys.exit(1)
-        elif args.platform:
-            if not post_to_platform(args.platform, message, args.image,
-                                   args.link, args.hashtags):
-                sys.exit(1)
-        else:
-            print("Error: --platform required for post action")
-            sys.exit(1)
+            platforms = ["facebook", "instagram", "twitter", "linkedin"]
 
-    elif args.action == "status":
-        check_status()
+        created = []
+        for plat in platforms:
+            created.append(
+                create_social_approval(
+                    plat,
+                    msg,
+                    domain,
+                    instagram_image_url=args.image_url,
+                    instagram_caption=args.caption,
+                    hashtags=args.hashtags,
+                )
+            )
 
-    elif args.action == "summary":
-        generate_summary(args.days)
+        for p in created:
+            print(str(p))
+        return 0
+
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
